@@ -22,7 +22,7 @@ from elastic_transport import ApiError, TransportError
 from jinja2 import Environment, FileSystemLoader
 
 from esrally import PROGRAM_NAME, types
-from esrally.client import factory
+from esrally.client import es_factory
 from esrally.tracker import corpus, index
 from esrally.utils import console, io
 

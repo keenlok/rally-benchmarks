@@ -1,3 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The OpenSearch Contributors require contributions made to
+# this file be licensed under the Apache-2.0 license or a
+# compatible open source license.
+# Modifications Copyright OpenSearch Contributors. See
+# GitHub history for details.
 # Licensed to Elasticsearch B.V. under one or more contributor
 # license agreements. See the NOTICE file distributed with
 # this work for additional information regarding copyright
@@ -21,6 +28,7 @@ import logging
 import os
 import threading
 
+import opensearchpy
 import tabulate
 
 from esrally import exceptions, metrics, time
@@ -44,6 +52,7 @@ def list_telemetry():
             SegmentStats,
             TransformStats,
             SearchableSnapshotsStats,
+            SegmentReplicationStats,
             ShardStats,
             DataStreamStats,
             IngestPipelineStats,
@@ -2589,3 +2598,152 @@ class GeoIpStats(TelemetryDevice):
             self.metrics_store.put_value_node_level(node_name, "geoip_cache_evictions", cache_stats["evictions"])
             self.metrics_store.put_value_node_level(node_name, "geoip_cache_hits_time_in_millis", cache_stats["hits_time_in_millis"])
             self.metrics_store.put_value_node_level(node_name, "geoip_cache_misses_time_in_millis", cache_stats["misses_time_in_millis"])
+
+class SegmentReplicationStats(TelemetryDevice):
+    internal = False
+    command = "segment-replication-stats"
+    human_name = "Segment Replication Stats"
+    help = "Regularly samples segment replication stats"
+
+    """
+    Gathers Segment Replication stats
+    """
+
+    def __init__(self, telemetry_params, clients, metrics_store):
+        """
+        :param telemetry_params: The configuration object for telemetry_params.
+            May optionally specify:
+            ``segment-replication-stats-indices``: str with index/index-pattern or list of indices or index-patterns
+            that stats should be collected from.
+            Not all clusters need to be specified, but any name used must be present in target.hosts.
+            Alternatively, the index or index pattern can be specified as a string in case only one cluster is involved.
+
+            Examples:
+            --telemetry-params="segment-replication-stats-indices:opensearchlogs-*"
+
+            --telemetry-params=./telemetry-params.json
+            where telemetry-params.json is:
+            {
+              "segment-replication-stats-indices": {
+                "default": ["leader-opensearchlogs-*"],
+                "follower": ["follower-opensearchlogs-*"]
+              }
+            }
+
+            ``segment-replication-stats-sample-interval``: positive integer controlling the sampling interval.
+            Default: 1 second.
+        :param clients: A dict of clients to all clusters.
+        :param metrics_store: The configured metrics store we write to.
+        """
+        super().__init__()
+
+        self.telemetry_params = telemetry_params
+        self.clients = clients
+        self.sample_interval = telemetry_params.get("segment-replication-stats-sample-interval", 1)
+        if self.sample_interval <= 0:
+            raise exceptions.SystemSetupError(
+                f"The telemetry parameter 'segment-replication-stats-sample-interval' must be greater than zero "
+                f"but was [{self.sample_interval}].")
+        self.specified_cluster_names = self.clients.keys()
+        indices_per_cluster = self.telemetry_params.get("segment-replication-stats-indices", None)
+        # allow the user to specify either an index pattern as string or as a JSON object
+        if isinstance(indices_per_cluster, str):
+            self.indices_per_cluster = {opts.TargetHosts.DEFAULT: [indices_per_cluster]}
+        else:
+            self.indices_per_cluster = indices_per_cluster
+
+        if self.indices_per_cluster:
+            for cluster_name in self.indices_per_cluster.keys():
+                if cluster_name not in clients:
+                    raise exceptions.SystemSetupError(
+                        f"The telemetry parameter 'segment-replication-stats-indices' must be a JSON Object with keys "
+                        f"matching the cluster names [{','.join(sorted(clients.keys()))}] specified in --target-hosts "
+                        f"but it had [{cluster_name}].")
+            self.specified_cluster_names = self.indices_per_cluster.keys()
+
+        self.metrics_store = metrics_store
+        self.samplers = []
+
+    def on_benchmark_start(self):
+        for cluster_name in self.specified_cluster_names:
+            recorder = SegmentReplicationStatsRecorder(
+                cluster_name, self.clients[cluster_name], self.metrics_store, self.sample_interval,
+                self.indices_per_cluster[cluster_name] if self.indices_per_cluster else None)
+            sampler = SamplerThread(recorder)
+            self.samplers.append(sampler)
+            sampler.setDaemon(True)
+            # we don't require starting recorders precisely at the same time
+            sampler.start()
+
+    def on_benchmark_stop(self):
+        if self.samplers:
+            for sampler in self.samplers:
+                sampler.finish()
+
+
+class SegmentReplicationStatsRecorder:
+    """
+    Collects and pushes segment replication stats for the specified cluster to the metric store.
+    """
+
+    def __init__(self, cluster_name, client, metrics_store, sample_interval, indices=None):
+        """
+        :param cluster_name: The cluster_name that the client connects to, as specified in target.hosts.
+        :param client: The OpenSearch client for this cluster.
+        :param metrics_store: The configured metrics store we write to.
+        :param sample_interval: integer controlling the interval, in seconds, between collecting samples.
+        :param indices: optional list of indices to filter results from.
+        """
+
+        self.cluster_name = cluster_name
+        self.client = client
+        self.metrics_store = metrics_store
+        self.sample_interval = sample_interval
+        self.indices = indices
+        self.logger = logging.getLogger(__name__)
+
+    def __str__(self):
+        return "segment replication stats"
+
+    def record(self):
+        """
+        Collect segment replication stats for indexes (optionally) specified in telemetry parameters
+        and push to metrics store.
+        """
+        if not self.indices:
+            # if 'index' parameter is not assigned, set it as empty string to allow getting API response for all indexes
+            self.indices = [""]
+        for index in self.indices:
+            try:
+                stats_api_endpoint = "/_cat/segment_replication/"
+                stats = self.client.transport.perform_request(
+                    "GET", stats_api_endpoint + index, params={"time": "ms", "bytes": "b", "format": "JSON"})
+            except opensearchpy.TransportError:
+                raise exceptions.SystemSetupError(
+                    f"A transport error occurred while collecting segment replication stats on cluster "
+                    f"[{self.cluster_name}]") from None
+
+            # parse the REST API response, each element in the list is a shard
+            for shard_stats in stats:
+                self._push_stats(stats=shard_stats, index=index)
+
+    def _push_stats(self, stats, index=None):
+
+        doc = {
+            "name": "segment-replication-stats",
+            "shard_id": stats["shardId"],
+            "target_node": stats["target_node"],
+            "target_host": stats["target_host"],
+            "checkpoints_behind": int(stats["checkpoints_behind"]),
+            "bytes_behind": int(stats["bytes_behind"]),
+            "current_lag_in_millis": int(stats["current_lag"]),
+            "last_completed_lag_in_millis": int(stats["last_completed_lag"]),
+            "rejected_requests": int(stats["rejected_requests"])
+        }
+
+        meta_data = {
+            "cluster": self.cluster_name,
+            "index": index
+        }
+
+        self.metrics_store.put_doc(doc, level=MetaInfoScope.cluster, meta_data=meta_data)

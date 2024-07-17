@@ -189,6 +189,7 @@ class BenchmarkCoordinator:
         self.current_challenge = None
 
     def setup(self, sources=False):
+        # TODO: Handle opensearch and possibly other clients
         # to load the track we need to know the correct cluster distribution version. Usually, this value should be set
         # but there are rare cases (external pipeline and user did not specify the distribution version) where we need
         # to derive it ourselves. For source builds we always assume "main"
@@ -200,7 +201,7 @@ class BenchmarkCoordinator:
                 distribution_version,
                 distribution_build_hash,
                 serverless_operator,
-            ) = client.factory.cluster_distribution_version(hosts, client_options)
+            ) = client.es_factory.cluster_distribution_version(hosts, client_options)
 
             self.logger.info(
                 "Automatically derived distribution flavor [%s], version [%s], and build hash [%s]",

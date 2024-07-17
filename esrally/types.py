@@ -63,6 +63,7 @@ Key = Literal[
     "cluster.name",
     "config.version",
     "data_streams",
+    "database.type",
     "datastore.host",
     "datastore.number_of_replicas",
     "datastore.number_of_shards",

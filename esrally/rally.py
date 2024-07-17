@@ -688,6 +688,11 @@ def create_arg_parser():
         help="Define the repository from where the Elasticsearch distribution should be downloaded (default: release).",
         default="release",
     )
+    race_parser.add_argument(
+        "--database-type",
+        help="Define the Database type to benchmark against (default: elasticsearch).",
+        default="elasticsearch",
+    )
 
     task_filter_group = race_parser.add_mutually_exclusive_group()
     task_filter_group.add_argument(
@@ -1176,6 +1181,7 @@ def dispatch_sub_command(arg_parser, args, cfg: types.Config):
             configure_connection_params(arg_parser, args, cfg)
             configure_telemetry_params(args, cfg)
             configure_mechanic_params(args, cfg)
+            cfg.add(config.Scope.applicationOverride, "mechanic", "database.type", args.database_type)
             cfg.add(config.Scope.applicationOverride, "mechanic", "runtime.jdk", args.runtime_jdk)
             cfg.add(config.Scope.applicationOverride, "mechanic", "source.revision", args.revision)
             cfg.add(config.Scope.applicationOverride, "mechanic", "source.build.method", args.source_build_method)
