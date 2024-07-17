@@ -43,6 +43,14 @@ class RequestContextManager:
     def request_end(self):
         return self.ctx.get("request_end")
 
+    @property
+    def client_request_start(self):
+        return self.ctx["client_request_start"]
+
+    @property
+    def client_request_end(self):
+        return self.ctx["client_request_end"]
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.ctx_holder.restore_context(self.token)
         # don't attempt to restore these values on the top-level context as they don't exist
@@ -85,6 +93,25 @@ class RequestContextHolder:
     def update_request_end(cls, new_request_end):
         meta = cls.request_context.get()
         meta["request_end"] = new_request_end
+
+    @classmethod
+    def update_client_request_start(cls, new_client_request_start):
+        meta = cls.request_context.get()
+        if "client_request_start" not in meta:
+            meta["client_request_start"] = new_client_request_start
+
+    @classmethod
+    def update_client_request_end(cls, new_client_request_end):
+        meta = cls.request_context.get()
+        meta["client_request_end"] = new_client_request_end
+
+    @classmethod
+    def on_client_request_start(cls):
+        cls.update_client_request_start(time.perf_counter())
+
+    @classmethod
+    def on_client_request_end(cls):
+        cls.update_client_request_end(time.perf_counter())
 
     @classmethod
     def on_request_start(cls):

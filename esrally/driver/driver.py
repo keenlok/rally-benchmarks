@@ -47,7 +47,7 @@ from esrally import (
     types,
 )
 from esrally.client import delete_api_keys
-from esrally.driver import runner, scheduler
+from esrally.driver import es_runner, os_runner, scheduler
 from esrally.track import TrackProcessorRegistry, load_track, load_track_plugins
 from esrally.utils import console, convert, net
 
@@ -276,7 +276,7 @@ class DriverActor(actor.RallyActor):
     def receiveMsg_PrepareBenchmark(self, msg, sender):
         self.benchmark_actor = sender
         self.logger.info(f"What is received??? {msg}, {sender}")
-        database_type = msg.config.opts('mechanic', 'database.type')
+        database_type = msg.config.opts('driver', 'database.type')
         self.logger.info(f"Creating client for {database_type} Database?, {database_type == 'elasticsearch'}")
 
         client_factory_class = client.EsClientFactory
@@ -789,7 +789,7 @@ class Driver:
             self.metrics_store, downsample_factor, self.track.meta_data, self.challenge.meta_data
         )
 
-        database_type = self.config.opts('mechanic', 'database.type')
+        database_type = self.config.opts('driver', 'database.type')
         self.logger.info(f"Creating client for {database_type} Database?, {database_type == 'elasticsearch'}")
 
         if database_type == "elasticsearch":
@@ -1379,9 +1379,13 @@ class Worker(actor.RallyActor):
         # we need to wake up more often in test mode
         if self.config.opts("track", "test.mode.enabled"):
             self.wakeup_interval = 0.5
-        runner.register_default_runners(self.config)
-        if self.track.has_plugins:
-            track.load_track_plugins(self.config, self.track.name, runner.register_runner, scheduler.register_scheduler)
+        database_type = self.config.opts("driver", "database.type")
+        if database_type == "opensearch":
+            os_runner.register_default_runners()
+        else:
+            es_runner.register_default_runners()
+            if self.track.has_plugins:
+                track.load_track_plugins(self.config, self.track.name, es_runner.register_runner, scheduler.register_scheduler)
         self.drive()
 
     @actor.no_retry("worker")  # pylint: disable=no-value-for-parameter
@@ -1888,6 +1892,7 @@ class AsyncIoAdapter:
         self.abort_on_error = abort_on_error
         self.client_contexts = client_contexts
         self.parent_worker_id = worker_id
+        self.database_type = self.cfg.opts("driver", "database.type")
         self.profiling_enabled = self.cfg.opts("driver", "profiling")
         self.assertions_enabled = self.cfg.opts("driver", "assertions")
         self.debug_event_loop = self.cfg.opts("system", "async.debug", mandatory=False, default_value=False)
@@ -1923,9 +1928,19 @@ class AsyncIoAdapter:
                 ).create_async(api_key=api_key, client_id=client_id)
             return es
 
+        def os_clients(client_id, all_hosts, all_client_options):
+            opensearch = {}
+            for cluster_name, cluster_hosts in all_hosts.items():
+                opensearch[cluster_name] = client.OsClientFactory(cluster_hosts,
+                                                                  all_client_options[cluster_name]).create_async()
+            return opensearch
+
         if self.assertions_enabled:
             self.logger.info("Task assertions enabled")
-        runner.enable_assertions(self.assertions_enabled)
+        if self.database_type == "elasticsearch":
+            es_runner.enable_assertions(self.assertions_enabled)
+        if self.database_type == "opensearch":
+            os_runner.enable_assertions(self.assertions_enabled)
 
         clients = []
         awaitables = []
@@ -1936,19 +1951,36 @@ class AsyncIoAdapter:
             if task not in params_per_task:
                 param_source = track.operation_parameters(self.track, task)
                 params_per_task[task] = param_source
-            schedule = schedule_for(task_allocation, params_per_task[task])
-            es = es_clients(
-                client_id,
-                self.cfg.opts("client", "hosts").all_hosts,
-                self.cfg.opts("client", "options"),
-                self.cfg.opts("mechanic", "distribution.version", mandatory=False),
-                self.cfg.opts("mechanic", "distribution.flavor", mandatory=False),
-            )
-            clients.append(es)
-            async_executor = AsyncExecutor(
-                client_id, task, schedule, es, self.sampler, self.cancel, self.complete,
-                task.error_behavior(self.abort_on_error)
-            )
+            schedule = schedule_for(task_allocation, params_per_task[task], self.database_type)
+            if self.database_type == "elasticsearch":
+                self.logger.info("Initialisting ES Clients for Async tasks")
+                es = es_clients(
+                    client_id,
+                    self.cfg.opts("client", "hosts").all_hosts,
+                    self.cfg.opts("client", "options"),
+                    self.cfg.opts("mechanic", "distribution.version", mandatory=False),
+                    self.cfg.opts("mechanic", "distribution.flavor", mandatory=False),
+                )
+                clients.append(es)
+                async_executor = AsyncExecutor(
+                    client_id, task, schedule, es, self.sampler, self.cancel, self.complete,
+                    task.error_behavior(self.abort_on_error)
+                )
+            elif self.database_type == "opensearch":
+                self.logger.info("Initialising Opensearch Clients for Async tasks")
+
+                client_count = len(self.task_allocations)
+                opensearch = os_clients(
+                    client_id,
+                    self.cfg.opts("client", "hosts").all_hosts,
+                    self.cfg.opts("client", "options").with_max_connections(client_count))
+                async_executor = AsyncExecutor(
+                    client_id, task, schedule, opensearch, self.sampler, self.cancel, self.complete,
+                    task.error_behavior(self.abort_on_error))
+            else:
+                self.logger.info("Unimplemented Async Client")
+                exit(1)
+
             final_executor = AsyncProfiler(async_executor) if self.profiling_enabled else async_executor
             awaitables.append(final_executor())
         task_names = [t.task.task.name for t in self.task_allocations]
@@ -1966,8 +1998,12 @@ class AsyncIoAdapter:
             shutdown_asyncgens_end = time.perf_counter()
             self.logger.debug("Total time to shutdown asyncgens: %f seconds.", (shutdown_asyncgens_end - run_end))
             for c in clients:
-                for es in c.values():
-                    await es.close()
+                if self.database_type == "elasticsearch":
+                    for es in c.values():
+                        await es.close()
+                elif self.database_type == "opensearch":
+                    for s in opensearch.values():
+                        await s.transport.close()
             transport_close_end = time.perf_counter()
             self.logger.debug("Total time to close transports: %f seconds.",
                               (transport_close_end - shutdown_asyncgens_end))
@@ -2246,7 +2282,7 @@ async def execute_single(runner, es, params, on_error):
         logging.getLogger(__name__).exception("Cannot execute runner [%s]; most likely due to missing parameters.",
                                               str(runner))
         msg = "Cannot execute [%s]. Provided parameters are: %s. Error: [%s]." % (
-        str(runner), list(params.keys()), str(e))
+            str(runner), list(params.keys()), str(e))
         raise exceptions.SystemSetupError(msg)
 
     if not request_meta_data["success"]:
@@ -2453,7 +2489,7 @@ class Allocator:
 
 # Runs a concrete schedule on one worker client
 # Needs to determine the runners and concrete iterations per client.
-def schedule_for(task_allocation, parameter_source):
+def schedule_for(task_allocation, parameter_source, database_type):
     """
     Calculates a client's schedule for a given task.
 
@@ -2480,7 +2516,11 @@ def schedule_for(task_allocation, parameter_source):
     # repetitive and may cause issues in thespian with many clients (an excessive number of actor messages is sent).
     if client_index == 0:
         logger.debug("Choosing [%s] for [%s].", sched, task)
-    runner_for_op = runner.runner_for(op.type)
+    if database_type == "opensearch":
+        runner_for_op = os_runner.runner_for(op.type)
+    else:
+        runner_for_op = es_runner.runner_for(op.type)
+
     params_for_op = parameter_source.partition(client_index, task.clients)
     if hasattr(sched, "parameter_source"):
         if client_index == 0:

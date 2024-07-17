@@ -161,17 +161,17 @@ class OsClientFactory:
 
         class LazyJSONSerializer(JSONSerializer):
             def loads(self, s):
-                meta = RallyAsync.request_context.get()
+                meta = RallyAsyncOpenSearch.request_context.get()
                 if "raw_response" in meta:
                     return io.BytesIO(s)
                 else:
                     return super().loads(s)
 
         async def on_request_start(session, trace_config_ctx, params):
-            RallyAsync.on_request_start()
+            RallyAsyncOpenSearch.on_request_start()
 
         async def on_request_end(session, trace_config_ctx, params):
-            RallyAsync.on_request_end()
+            RallyAsyncOpenSearch.on_request_end()
 
         trace_config = aiohttp.TraceConfig()
         trace_config.on_request_start.append(on_request_start)
