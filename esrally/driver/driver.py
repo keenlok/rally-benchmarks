@@ -278,6 +278,7 @@ class DriverActor(actor.RallyActor):
         self.logger.info(f"What is received??? {msg}, {sender}")
         database_type = msg.config.opts('mechanic', 'database.type')
         self.logger.info(f"Creating client for {database_type} Database?, {database_type == 'elasticsearch'}")
+
         client_factory_class = client.EsClientFactory
         if database_type == "opensearch":
             client_factory_class = client.OsClientFactory
