@@ -79,8 +79,8 @@ def create_track(cfg: types.Config):
     data_streams = cfg.opts("generator", "data_streams")
     batch_size = cfg.opts("generator", "batch_size")
 
-    distribution_flavor, distribution_version, _, _ = factory.cluster_distribution_version(target_hosts, client_options)
-    client = factory.EsClientFactory(
+    distribution_flavor, distribution_version, _, _ = es_factory.cluster_distribution_version(target_hosts, client_options)
+    client = es_factory.EsClientFactory(
         hosts=target_hosts,
         client_options=client_options,
         distribution_version=distribution_version,

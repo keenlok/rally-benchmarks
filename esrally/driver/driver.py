@@ -644,6 +644,17 @@ class Driver:
 
     def create_os_clients(self):
         all_hosts = self.config.opts("client", "hosts").all_hosts
+        pg = {}
+        for cluster_name, cluster_hosts in all_hosts.items():
+            all_client_options = self.config.opts("client", "options").all_client_options
+            cluster_client_options = dict(all_client_options[cluster_name])
+            # Use retries to avoid aborts on long living connections for telemetry devices
+            cluster_client_options["retry-on-timeout"] = True
+            pg[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
+        return pg
+
+    def create_pg_clients(self):
+        all_hosts = self.config.opts("client", "hosts").all_hosts
         opensearch = {}
         for cluster_name, cluster_hosts in all_hosts.items():
             all_client_options = self.config.opts("client", "options").all_client_options
@@ -833,7 +844,7 @@ class Driver:
                 serverless_mode=serverless_mode,
                 serverless_operator=serverless_operator,
             )
-        elif database_type == "postgresql":
+        elif database_type == "postgres":
             pass
         elif database_type == "opensearch":
             os_clients = self.create_os_clients()
@@ -1977,6 +1988,18 @@ class AsyncIoAdapter:
                 async_executor = AsyncExecutor(
                     client_id, task, schedule, opensearch, self.sampler, self.cancel, self.complete,
                     task.error_behavior(self.abort_on_error))
+
+            elif self.database_type == "postgres":
+                self.logger.info("Initialising postgres Clients for Async tasks")
+
+                client_count = len(self.task_allocations)
+                pg = os_clients(
+                    client_id,
+                    self.cfg.opts("client", "hosts").all_hosts,
+                    self.cfg.opts("client", "options").with_max_connections(client_count))
+                async_executor = AsyncExecutor(
+                    client_id, task, schedule, opensearch, self.sampler, self.cancel, self.complete,
+                    task.error_behavior(self.abort_on_error))
             else:
                 self.logger.info("Unimplemented Async Client")
                 exit(1)
@@ -2041,13 +2064,13 @@ class AsyncProfiler:
 
 
 class AsyncExecutor:
-    def __init__(self, client_id, task, schedule, es, sampler, cancel, complete, on_error):
+    def __init__(self, client_id, task, schedule, eos, sampler, cancel, complete, on_error):
         """
         Executes tasks according to the schedule for a given operation.
 
         :param task: The task that is executed.
         :param schedule: The schedule for this task.
-        :param es: Elasticsearch client that will be used to execute the operation.
+        :param eos: Elastic/Opensearch client that will be used to execute the operation.
         :param sampler: A container to store raw samples.
         :param cancel: A shared boolean that indicates we need to cancel execution.
         :param complete: A shared boolean that indicates we need to prematurely complete execution.
@@ -2057,7 +2080,7 @@ class AsyncExecutor:
         self.task = task
         self.op = task.operation
         self.schedule_handle = schedule
-        self.es = es
+        self.eos = eos
         self.sampler = sampler
         self.cancel = cancel
         self.complete = complete
@@ -2095,8 +2118,8 @@ class AsyncExecutor:
                 absolute_processing_start = time.time()
                 processing_start = time.perf_counter()
                 self.schedule_handle.before_request(processing_start)
-                with self.es["default"].new_request_context() as request_context:
-                    total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.es, params,
+                with self.eos["default"].new_request_context() as request_context:
+                    total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.eos, params,
                                                                                         self.on_error)
                     request_start = request_context.request_start
                     request_end = request_context.request_end
@@ -2179,7 +2202,7 @@ class AsyncExecutor:
                 self.complete.set()
 
 
-async def execute_single(runner, es, params, on_error):
+async def execute_single(runner, eos, params, on_error):
     """
     Invokes the given runner once and provides the runner's return value in a uniform structure.
 
@@ -2191,7 +2214,7 @@ async def execute_single(runner, es, params, on_error):
     fatal_error = False
     try:
         async with runner:
-            return_value = await runner(es, params)
+            return_value = await runner(eos, params)
         if isinstance(return_value, tuple) and len(return_value) == 2:
             total_ops, total_ops_unit = return_value
             request_meta_data = {"success": True}
