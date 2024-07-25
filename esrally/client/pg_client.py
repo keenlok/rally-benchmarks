@@ -8,7 +8,7 @@ from esrally.exceptions import ConfigError
 
 class RallyAsyncPostgres(AsyncPostgres, RequestContextHolder):
     def __init__(self, hosts=None, *args, **kwargs):
-        print(hosts)
+        # print(hosts)
         # print(args)
         # print(kwargs)
         if hosts is None:
