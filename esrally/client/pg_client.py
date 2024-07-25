@@ -28,8 +28,8 @@ class RallyAsyncPostgres(AsyncPostgres, RequestContextHolder):
             print("try creating postgres connection")
             conn = psycopg.connect(conninfo)
             print("Postgres client created successfully")
-            # super().__init__(pgconn=conn.pgconn)
-            # print("Async client created successfully")
+            super().__init__(pgconn=conn.pgconn)
+            print("Async client created successfully")
         except psycopg.Error as e:
             print(e)
-            # raise e
+            raise e
