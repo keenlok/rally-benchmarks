@@ -2129,7 +2129,6 @@ class AsyncExecutor:
                 absolute_processing_start = time.time()
                 processing_start = time.perf_counter()
                 self.schedule_handle.before_request(processing_start)
-                self.logger.info(type(self.db_client["default"]))
                 with self.db_client["default"].new_request_context() as request_context:
                     total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.db_client, params,
                                                                                         self.on_error)
