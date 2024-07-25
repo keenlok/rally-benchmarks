@@ -655,14 +655,14 @@ class Driver:
 
     def create_pg_clients(self):
         all_hosts = self.config.opts("client", "hosts").all_hosts
-        opensearch = {}
+        pg = {}
         for cluster_name, cluster_hosts in all_hosts.items():
             all_client_options = self.config.opts("client", "options").all_client_options
             cluster_client_options = dict(all_client_options[cluster_name])
             # Use retries to avoid aborts on long living connections for telemetry devices
             cluster_client_options["retry-on-timeout"] = True
-            opensearch[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
-        return opensearch
+            pg[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
+        return pg
 
     def create_mongo_client(self):
         all_hosts = self.config.opts("client", "hosts").all_hosts
@@ -2064,13 +2064,13 @@ class AsyncProfiler:
 
 
 class AsyncExecutor:
-    def __init__(self, client_id, task, schedule, eos, sampler, cancel, complete, on_error):
+    def __init__(self, client_id, task, schedule, db_client, sampler, cancel, complete, on_error):
         """
         Executes tasks according to the schedule for a given operation.
 
         :param task: The task that is executed.
         :param schedule: The schedule for this task.
-        :param eos: Elastic/Opensearch client that will be used to execute the operation.
+        :param db_client: DB client that will be used to execute the operation.
         :param sampler: A container to store raw samples.
         :param cancel: A shared boolean that indicates we need to cancel execution.
         :param complete: A shared boolean that indicates we need to prematurely complete execution.
@@ -2080,7 +2080,7 @@ class AsyncExecutor:
         self.task = task
         self.op = task.operation
         self.schedule_handle = schedule
-        self.eos = eos
+        self.db_client = db_client
         self.sampler = sampler
         self.cancel = cancel
         self.complete = complete
@@ -2118,8 +2118,8 @@ class AsyncExecutor:
                 absolute_processing_start = time.time()
                 processing_start = time.perf_counter()
                 self.schedule_handle.before_request(processing_start)
-                with self.eos["default"].new_request_context() as request_context:
-                    total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.eos, params,
+                with self.db_client["default"].new_request_context() as request_context:
+                    total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.db_client, params,
                                                                                         self.on_error)
                     request_start = request_context.request_start
                     request_end = request_context.request_end
