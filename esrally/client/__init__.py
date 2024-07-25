@@ -25,3 +25,7 @@ from .es_factory import (
 from .os_factory import (
     OsClientFactory
 )
+
+from .pg_factory import (
+    PgClientFactory
+)
