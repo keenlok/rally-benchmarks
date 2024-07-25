@@ -644,14 +644,14 @@ class Driver:
 
     def create_os_clients(self):
         all_hosts = self.config.opts("client", "hosts").all_hosts
-        pg = {}
+        opensearch = {}
         for cluster_name, cluster_hosts in all_hosts.items():
             all_client_options = self.config.opts("client", "options").all_client_options
             cluster_client_options = dict(all_client_options[cluster_name])
             # Use retries to avoid aborts on long living connections for telemetry devices
             cluster_client_options["retry-on-timeout"] = True
-            pg[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
-        return pg
+            opensearch[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
+        return opensearch
 
     def create_pg_clients(self):
         all_hosts = self.config.opts("client", "hosts").all_hosts
@@ -677,9 +677,9 @@ class Driver:
         return mongo
 
     def prepare_telemetry(self):
-        enabled_devices = self.config.opts("telemetry", "devices")
-        telemetry_params = self.config.opts("telemetry", "params")
-        log_root = paths.race_root(self.config)
+        enabled_devices = []
+        devices = []
+        self.telemetry = telemetry.Telemetry(enabled_devices, devices=devices)
 
         # todo: make this the wrapper for the various DBs so we only call prepare_telemetry once
 
@@ -845,7 +845,7 @@ class Driver:
                 serverless_operator=serverless_operator,
             )
         elif database_type == "postgres":
-            pass
+            self.prepare_telemetry()
         elif database_type == "opensearch":
             os_clients = self.create_os_clients()
 
@@ -1942,9 +1942,20 @@ class AsyncIoAdapter:
         def os_clients(client_id, all_hosts, all_client_options):
             opensearch = {}
             for cluster_name, cluster_hosts in all_hosts.items():
-                opensearch[cluster_name] = client.OsClientFactory(cluster_hosts,
-                                                                  all_client_options[cluster_name]).create_async()
+                opensearch[cluster_name] = client.OsClientFactory(
+                    cluster_hosts,
+                    all_client_options[cluster_name]
+                ).create_async()
             return opensearch
+
+        def pg_clients(client_id, all_hosts, all_client_options):
+            pg = {}
+            for cluster_name, cluster_hosts in all_hosts.items():
+                pg[cluster_name] = client.PgClientFactory(
+                    cluster_hosts,
+                    all_client_options[cluster_name]
+                ).create_async()
+            return pg
 
         if self.assertions_enabled:
             self.logger.info("Task assertions enabled")
@@ -1993,12 +2004,12 @@ class AsyncIoAdapter:
                 self.logger.info("Initialising postgres Clients for Async tasks")
 
                 client_count = len(self.task_allocations)
-                pg = os_clients(
+                pg = pg_clients(
                     client_id,
                     self.cfg.opts("client", "hosts").all_hosts,
                     self.cfg.opts("client", "options").with_max_connections(client_count))
                 async_executor = AsyncExecutor(
-                    client_id, task, schedule, opensearch, self.sampler, self.cancel, self.complete,
+                    client_id, task, schedule, pg, self.sampler, self.cancel, self.complete,
                     task.error_behavior(self.abort_on_error))
             else:
                 self.logger.info("Unimplemented Async Client")
@@ -2118,6 +2129,7 @@ class AsyncExecutor:
                 absolute_processing_start = time.time()
                 processing_start = time.perf_counter()
                 self.schedule_handle.before_request(processing_start)
+                self.logger.info(type(self.db_client["default"]))
                 with self.db_client["default"].new_request_context() as request_context:
                     total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.db_client, params,
                                                                                         self.on_error)

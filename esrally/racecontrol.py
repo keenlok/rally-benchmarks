@@ -193,38 +193,39 @@ class BenchmarkCoordinator:
         # to load the track we need to know the correct cluster distribution version. Usually, this value should be set
         # but there are rare cases (external pipeline and user did not specify the distribution version) where we need
         # to derive it ourselves. For source builds we always assume "main"
-        if not sources and not self.cfg.exists("mechanic", "distribution.version"):
-            hosts = self.cfg.opts("client", "hosts").default
-            client_options = self.cfg.opts("client", "options").default
-            (
-                distribution_flavor,
-                distribution_version,
-                distribution_build_hash,
-                serverless_operator,
-            ) = client.es_factory.cluster_distribution_version(hosts, client_options)
-
-            self.logger.info(
-                "Automatically derived distribution flavor [%s], version [%s], and build hash [%s]",
-                distribution_flavor,
-                distribution_version,
-                distribution_build_hash,
-            )
-            self.cfg.add(config.Scope.benchmark, "mechanic", "distribution.version", distribution_version)
-            self.cfg.add(config.Scope.benchmark, "mechanic", "distribution.flavor", distribution_flavor)
-            if versions.is_serverless(distribution_flavor):
-                if not self.cfg.exists("driver", "serverless.mode"):
-                    self.cfg.add(config.Scope.benchmark, "driver", "serverless.mode", True)
-
-                if not self.cfg.exists("driver", "serverless.operator"):
-                    self.cfg.add(config.Scope.benchmark, "driver", "serverless.operator", serverless_operator)
-                console.info(f"Detected Elasticsearch Serverless mode with operator=[{serverless_operator}].")
-            else:
-                min_es_version = versions.Version.from_string(version.minimum_es_version())
-                specified_version = versions.Version.from_string(distribution_version)
-                if specified_version < min_es_version:
-                    raise exceptions.SystemSetupError(
-                        f"Cluster version must be at least [{min_es_version}] but was [{distribution_version}]"
-                    )
+        # TODO: Ignore distribution etc for now!
+        # if not sources and not self.cfg.exists("mechanic", "distribution.version"):
+        #     hosts = self.cfg.opts("client", "hosts").default
+        #     client_options = self.cfg.opts("client", "options").default
+        #     (
+        #         distribution_flavor,
+        #         distribution_version,
+        #         distribution_build_hash,
+        #         serverless_operator,
+        #     ) = client.es_factory.cluster_distribution_version(hosts, client_options)
+        #
+        #     self.logger.info(
+        #         "Automatically derived distribution flavor [%s], version [%s], and build hash [%s]",
+        #         distribution_flavor,
+        #         distribution_version,
+        #         distribution_build_hash,
+        #     )
+        #     self.cfg.add(config.Scope.benchmark, "mechanic", "distribution.version", distribution_version)
+        #     self.cfg.add(config.Scope.benchmark, "mechanic", "distribution.flavor", distribution_flavor)
+        #     if versions.is_serverless(distribution_flavor):
+        #         if not self.cfg.exists("driver", "serverless.mode"):
+        #             self.cfg.add(config.Scope.benchmark, "driver", "serverless.mode", True)
+        #
+        #         if not self.cfg.exists("driver", "serverless.operator"):
+        #             self.cfg.add(config.Scope.benchmark, "driver", "serverless.operator", serverless_operator)
+        #         console.info(f"Detected Elasticsearch Serverless mode with operator=[{serverless_operator}].")
+        #     else:
+        #         min_es_version = versions.Version.from_string(version.minimum_es_version())
+        #         specified_version = versions.Version.from_string(distribution_version)
+        #         if specified_version < min_es_version:
+        #             raise exceptions.SystemSetupError(
+        #                 f"Cluster version must be at least [{min_es_version}] but was [{distribution_version}]"
+        #             )
 
         self.current_track = track.load_track(self.cfg, install_dependencies=True)
         self.track_revision = self.cfg.opts("track", "repository.revision", mandatory=False)
