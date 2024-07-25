@@ -3,6 +3,7 @@ import psycopg
 from psycopg import errors
 
 from esrally.client.context import RequestContextHolder
+from esrally.exceptions import ConfigError
 
 
 class RallyAsyncPostgres(AsyncPostgres, RequestContextHolder):
@@ -20,16 +21,15 @@ class RallyAsyncPostgres(AsyncPostgres, RequestContextHolder):
         user_spec = kwargs.get('userspec', '')
         url_prefix = hosts[0].get('url_prefix', '/postgres')
         conninfo = f"{scheme}://{user_spec}@{host_str}{url_prefix}"
-        print(conninfo)
+        # print(conninfo)
 
         # create the connection synchronously,
         # but we still want the Asynchronous PG client
         try:
-            print("try creating postgres connection")
+            # print("try creating postgres connection")
             conn = psycopg.connect(conninfo)
-            print("Postgres client created successfully")
+            # print("Postgres client created successfully")
             super().__init__(pgconn=conn.pgconn)
-            print("Async client created successfully")
+            # print("Async client created successfully")
         except psycopg.Error as e:
-            print(e)
-            raise e
+            raise ConfigError(f"Cannot connect to Postgres DB! {e}")
