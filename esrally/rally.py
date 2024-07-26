@@ -693,6 +693,11 @@ def create_arg_parser():
         help="Define the repository from where the Elasticsearch distribution should be downloaded (default: release).",
         default="release",
     )
+    race_parser.add_argument(
+        "--database-type",
+        help="Define the Database type to benchmark against (default: elasticsearch).",
+        default="elasticsearch",
+    )
 
     task_filter_group = race_parser.add_mutually_exclusive_group()
     task_filter_group.add_argument(
@@ -1173,6 +1178,7 @@ def dispatch_sub_command(arg_parser, args, cfg: types.Config):
             cfg.add(config.Scope.applicationOverride, "system", "install.id", args.race_id)
             cfg.add(config.Scope.applicationOverride, "race", "pipeline", args.pipeline)
             cfg.add(config.Scope.applicationOverride, "race", "user.tags", opts.to_dict(args.user_tag))
+            cfg.add(config.Scope.applicationOverride, "driver", "database.type", args.database_type)
             cfg.add(config.Scope.applicationOverride, "driver", "profiling", args.enable_driver_profiling)
             cfg.add(config.Scope.applicationOverride, "driver", "assertions", args.enable_assertions)
             cfg.add(config.Scope.applicationOverride, "driver", "on.error", args.on_error)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import collections
 import inspect
+import json
 import logging
 import math
 import numbers
@@ -1367,6 +1368,255 @@ class SourceOnlyIndexDataReader(IndexDataReader):
     def read_bulk(self):
         bulk_items = next(self.file_source)
         return len(bulk_items) // 2, bulk_items
+
+
+
+class BulkInsertParamSource(ParamSource):
+    def __init__(self, track, params, **kwargs):
+        super().__init__(track, params, **kwargs)
+
+        self.conflict_probability = None
+        self.on_conflict = None
+        self.recency = None
+
+        self.corpora = self.used_corpora(track, params)
+
+        if len(self.corpora) == 0:
+            raise exceptions.InvalidSyntax(
+                f"There is no document corpus definition for track {track}. You must add at "
+                f"least one before making bulk requests to Elasticsearch."
+            )
+
+        try:
+            self.bulk_size = int(params["bulk-size"])
+            if self.bulk_size <= 0:
+                raise exceptions.InvalidSyntax("'bulk-size' must be positive but was %d" % self.bulk_size)
+        except KeyError:
+            raise exceptions.InvalidSyntax("Mandatory parameter 'bulk-size' is missing")
+        except ValueError:
+            raise exceptions.InvalidSyntax("'bulk-size' must be numeric")
+
+        try:
+            self.batch_size = int(params.get("batch-size", self.bulk_size))
+            if self.batch_size <= 0:
+                raise exceptions.InvalidSyntax("'batch-size' must be positive but was %d" % self.batch_size)
+            if self.batch_size < self.bulk_size:
+                raise exceptions.InvalidSyntax("'batch-size' must be greater than or equal to 'bulk-size'")
+            if self.batch_size % self.bulk_size != 0:
+                raise exceptions.InvalidSyntax("'batch-size' must be a multiple of 'bulk-size'")
+        except ValueError:
+            raise exceptions.InvalidSyntax("'batch-size' must be numeric")
+
+        self.ingest_percentage = self.float_param(params, name="ingest-percentage", default_value=100, min_value=0, max_value=100)
+        self.refresh = params.get("refresh")
+        self.looped = params.get("looped", False)
+        self.param_source = PartitionBulkInsertParamSource(
+            self.corpora,
+            self.batch_size,
+            self.bulk_size,
+            self.ingest_percentage,
+            self.conflict_probability,
+            self.on_conflict,
+            self.recency,
+            self.looped,
+            self._params,
+        )
+
+    def float_param(self, params, name, default_value, min_value, max_value, min_operator=operator.le):
+        try:
+            value = float(params.get(name, default_value))
+            if min_operator(value, min_value) or value > max_value:
+                interval_min = "(" if min_operator is operator.le else "["
+                raise exceptions.InvalidSyntax(
+                    f"'{name}' must be in the range {interval_min}{min_value:.1f}, {max_value:.1f}] but was {value:.1f}"
+                )
+            return value
+        except ValueError:
+            raise exceptions.InvalidSyntax(f"'{name}' must be numeric")
+
+    def used_corpora(self, t, params):
+        corpora = []
+        track_corpora_names = [corpus.name for corpus in t.corpora]
+        corpora_names = params.get("corpora", track_corpora_names)
+        if isinstance(corpora_names, str):
+            corpora_names = [corpora_names]
+
+        for corpus in t.corpora:
+            if corpus.name in corpora_names:
+                filtered_corpus = corpus.filter(
+                    source_format=track.Documents.SOURCE_FORMAT_BULK,
+                    target_indices=params.get("indices"),
+                    target_data_streams=params.get("data-streams"),
+                )
+                if filtered_corpus.number_of_documents(source_format=track.Documents.SOURCE_FORMAT_BULK) > 0:
+                    corpora.append(filtered_corpus)
+
+        # the track has corpora but none of them match
+        if t.corpora and not corpora:
+            raise exceptions.RallyAssertionError(
+                "The provided corpus %s does not match any of the corpora %s." % (corpora_names, track_corpora_names)
+            )
+
+        return corpora
+
+    def partition(self, partition_index, total_partitions):
+        # register the new partition internally
+        self.param_source.partition(partition_index, total_partitions)
+        return self.param_source
+
+    def params(self):
+        raise exceptions.RallyError("Do not use a BulkInsertParamSource without partitioning")
+
+
+class PartitionBulkInsertParamSource:
+    def __init__(
+        self,
+        corpora,
+        batch_size,
+        bulk_size,
+        ingest_percentage,
+        conflict_probability,
+        on_conflict,
+        recency,
+        looped: bool = False,
+        original_params=None,
+    ):
+        """
+
+        :param corpora: Specification of affected document corpora.
+        :param batch_size: The number of documents to read in one go.
+        :param bulk_size: The size of bulk index operations (number of documents per bulk).
+        :param ingest_percentage: A number between (0.0, 100.0] that defines how much of the whole corpus should be ingested.
+        :param id_conflicts: The type of id conflicts.
+        :param conflict_probability: A number between (0.0, 100.0] that defines the probability that a document is replaced by another one.
+        :param on_conflict: A string indicating which action should be taken on id conflicts (either "index" or "update").
+        :param recency: A number between [0.0, 1.0] indicating whether to bias generation of conflicting ids towards more recent ones.
+                        May be None.
+        :param pipeline: The name of the ingest pipeline to run.
+        :param refresh: Optional string values are "true", "wait_for", "false".
+                        If "true", Elasticsearch refreshes the affected shards in the background.
+                        If "wait_for", the client is blocked until Elasticsearch finishes the refresh operation.
+                        If "false", Elasticsearch will use the default refresh behavior.
+        :param looped: Set to True for looped mode where bulk requests are repeated from the beginning when entire corpus was ingested.
+        :param original_params: The original dict passed to the parent parameter source.
+        """
+        self.corpora = corpora
+        self.partitions = []
+        self.total_partitions = None
+        self.batch_size = batch_size
+        self.bulk_size = bulk_size
+        self.ingest_percentage = ingest_percentage
+        self.conflict_probability = conflict_probability
+        self.on_conflict = on_conflict
+        self.recency = recency
+        self.looped = looped
+        self.original_params = original_params
+        # this is only intended for unit-testing
+        self.create_reader = original_params.pop("__create_reader", create_insert_reader)
+        self.current_bulk = 0
+        # use a value > 0 so percent_completed returns a sensible value
+        self.total_bulks = 1
+        self.infinite = False
+
+    def partition(self, partition_index, total_partitions):
+        if self.total_partitions is None:
+            self.total_partitions = total_partitions
+        elif self.total_partitions != total_partitions:
+            raise exceptions.RallyAssertionError(
+                f"Total partitions is expected to be [{self.total_partitions}] but was [{total_partitions}]"
+            )
+        self.partitions.append(partition_index)
+
+    def params(self):
+        if self.current_bulk == 0:
+            self._init_internal_params()
+        # self.internal_params always reads all files. This is necessary to ensure we terminate early in case
+        # the user has specified ingest percentage.
+        if self.current_bulk == self.total_bulks:
+            # start from the beginning in looped mode, otherwise stop the run
+            if self.looped:
+                self.current_bulk = 0
+                self._init_internal_params()
+            else:
+                raise StopIteration()
+        self.current_bulk += 1
+        return next(self.internal_params)
+
+    def _init_internal_params(self):
+        # contains a continuous range of client ids
+        self.partitions = sorted(self.partitions)
+        start_index = self.partitions[0]
+        end_index = self.partitions[-1]
+
+        self.internal_params = bulk_data_based(
+            self.total_partitions,
+            start_index,
+            end_index,
+            self.corpora,
+            self.batch_size,
+            self.bulk_size,
+            None,
+            self.conflict_probability,
+            self.on_conflict,
+            self.recency,
+            None,
+            self.original_params,
+            self.create_reader,
+        )
+
+        all_bulks = number_of_bulks(self.corpora, start_index, end_index, self.total_partitions, self.bulk_size)
+        self.total_bulks = math.ceil((all_bulks * self.ingest_percentage) / 100)
+
+    @property
+    def percent_completed(self):
+        return self.current_bulk / self.total_bulks
+
+
+def create_insert_reader(
+    docs, offset, num_lines, num_docs, batch_size, bulk_size, id_conflicts, conflict_probability, on_conflict, recency
+):
+    source = Slice(io.MmapSource, offset, num_lines)
+    target = None
+    if docs.target_index:
+        target = docs.target_index
+
+    return SourceOnlyDataReader(docs.document_file, batch_size, bulk_size, source, target, docs.target_type)
+
+
+class SourceOnlyDataReader(SourceOnlyIndexDataReader):
+    def __next__(self):
+        """
+        Returns lines for N bulk requests (where N is bulk_size / batch_size)
+        """
+        batch = []
+        try:
+            docs_in_batch = 0
+            while docs_in_batch < self.batch_size:
+                try:
+                    docs_in_bulk, bulk = self.read_bulk()
+                except StopIteration:
+                    break
+                if docs_in_bulk == 0:
+                    break
+                docs_in_batch += docs_in_bulk
+
+                # decode bytes to json
+                doc_batch = []
+                for line in bulk:
+                    doc = line.decode("utf-8")
+                    doc = json.loads(doc)
+                    doc_batch.append(doc)
+                batch.append((docs_in_batch, doc_batch))
+
+            if docs_in_batch == 0:
+                raise StopIteration()
+            return self.index_name, self.type_name, batch
+        except OSError:
+            logging.getLogger(__name__).exception("Could not read [%s]", self.data_file)
+
+    def read_bulk(self):
+        bulk_items = next(self.file_source)
+        return len(bulk_items), bulk_items
 
 
 register_param_source_for_operation(track.OperationType.Bulk, BulkIndexParamSource)

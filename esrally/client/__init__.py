@@ -16,10 +16,16 @@
 # under the License.
 
 from .context import RequestContextHolder, RequestContextManager
-from .factory import (
+from .es_factory import (
     EsClientFactory,
     cluster_distribution_version,
     create_api_key,
-    delete_api_keys,
-    wait_for_rest_layer,
+    delete_api_keys
+)
+from .os_factory import (
+    OsClientFactory
+)
+
+from .pg_factory import (
+    PgClientFactory
 )

@@ -27,7 +27,7 @@ import elasticsearch
 import pytest
 
 from esrally import config, exceptions, metrics, track
-from esrally.driver import driver, runner, scheduler
+from esrally.driver import driver, es_runner, scheduler
 from esrally.driver.driver import ApiKey, ClientContext
 from esrally.track import params
 
@@ -172,7 +172,7 @@ class TestDriver:
         resolve.side_effect = ["10.5.5.1", "10.5.5.2"]
 
         driver_actor = self.create_test_driver_actor()
-        d = driver.Driver(driver_actor, self.cfg, es_client_factory_class=self.StaticClientFactory)
+        d = driver.Driver(driver_actor, self.cfg, client_factory_class=self.StaticClientFactory)
         d.prepare_benchmark(t=self.track)
 
         driver_actor.prepare_track.assert_called_once_with(["10.5.5.1", "10.5.5.2"], self.cfg, self.track)
@@ -194,7 +194,7 @@ class TestDriver:
     @mock.patch.object(driver.DriverActor, "prepare_track")
     def test_prepare_serverless_benchmark(self, mock_method):
         driver_actor = driver.DriverActor
-        d = driver.Driver(driver_actor, self.cfg, es_client_factory_class=self.StaticServerlessClientFactory)
+        d = driver.Driver(driver_actor, self.cfg, client_factory_class=self.StaticServerlessClientFactory)
         d.prepare_benchmark(t=self.track)
 
         # was build hash and version determined correctly?
@@ -219,7 +219,7 @@ class TestDriver:
     def test_assign_drivers_round_robin(self):
         worker_id = [0, 1, 2, 3]
         driver_actor = self.create_test_driver_actor()
-        d = driver.Driver(driver_actor, self.cfg, es_client_factory_class=self.StaticClientFactory)
+        d = driver.Driver(driver_actor, self.cfg, client_factory_class=self.StaticClientFactory)
 
         d.prepare_benchmark(t=self.track)
 
@@ -241,7 +241,7 @@ class TestDriver:
 
     def test_client_reaches_join_point_others_still_executing(self):
         driver_actor = self.create_test_driver_actor()
-        d = driver.Driver(driver_actor, self.cfg, es_client_factory_class=self.StaticClientFactory)
+        d = driver.Driver(driver_actor, self.cfg, client_factory_class=self.StaticClientFactory)
 
         d.prepare_benchmark(t=self.track)
         d.start_benchmark()
@@ -259,7 +259,7 @@ class TestDriver:
 
     def test_client_reaches_join_point_which_completes_parent(self):
         driver_actor = self.create_test_driver_actor()
-        d = driver.Driver(driver_actor, self.cfg, es_client_factory_class=self.StaticClientFactory)
+        d = driver.Driver(driver_actor, self.cfg, client_factory_class=self.StaticClientFactory)
 
         d.prepare_benchmark(t=self.track)
         d.start_benchmark()
@@ -315,7 +315,7 @@ class TestDriver:
         }
         self.cfg.add(config.Scope.application, "client", "options", self.Holder(all_client_options={"default": client_opts}))
         driver_actor = self.create_test_driver_actor()
-        d = driver.Driver(driver_actor, self.cfg, es_client_factory_class=self.StaticClientFactory)
+        d = driver.Driver(driver_actor, self.cfg, client_factory_class=self.StaticClientFactory)
         d.prepare_benchmark(t=self.track)
         d.start_benchmark()
 
@@ -1502,7 +1502,7 @@ class TestAsyncExecutor:
             client_id=2,
             task=task,
             schedule=schedule,
-            es={"default": es},
+            db_client={"default": es},
             sampler=sampler,
             cancel=cancel,
             complete=complete,
@@ -1566,7 +1566,7 @@ class TestAsyncExecutor:
             client_id=2,
             task=task,
             schedule=schedule,
-            es={"default": es},
+            db_client={"default": es},
             sampler=sampler,
             cancel=cancel,
             complete=complete,
@@ -1635,7 +1635,7 @@ class TestAsyncExecutor:
             client_id=0,
             task=task,
             schedule=schedule,
-            es={"default": es},
+            db_client={"default": es},
             sampler=sampler,
             cancel=cancel,
             complete=complete,
@@ -1709,7 +1709,7 @@ class TestAsyncExecutor:
                 client_id=0,
                 task=task,
                 schedule=schedule,
-                es={"default": es},
+                db_client={"default": es},
                 sampler=sampler,
                 cancel=cancel,
                 complete=complete,
@@ -1761,7 +1761,7 @@ class TestAsyncExecutor:
                 client_id=0,
                 task=task,
                 schedule=schedule,
-                es={"default": es},
+                db_client={"default": es},
                 sampler=sampler,
                 cancel=cancel,
                 complete=complete,
@@ -1820,7 +1820,7 @@ class TestAsyncExecutor:
             client_id=2,
             task=task,
             schedule=ScheduleHandle(),
-            es={"default": es},
+            db_client={"default": es},
             sampler=sampler,
             cancel=cancel,
             complete=complete,

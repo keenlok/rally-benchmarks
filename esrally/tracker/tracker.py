@@ -22,7 +22,7 @@ from elastic_transport import ApiError, TransportError
 from jinja2 import Environment, FileSystemLoader
 
 from esrally import PROGRAM_NAME, types
-from esrally.client import factory
+from esrally.client import es_factory
 from esrally.tracker import corpus, index
 from esrally.utils import console, io
 
@@ -79,8 +79,8 @@ def create_track(cfg: types.Config):
     data_streams = cfg.opts("generator", "data_streams")
     batch_size = cfg.opts("generator", "batch_size")
 
-    distribution_flavor, distribution_version, _, _ = factory.cluster_distribution_version(target_hosts, client_options)
-    client = factory.EsClientFactory(
+    distribution_flavor, distribution_version, _, _ = es_factory.cluster_distribution_version(target_hosts, client_options)
+    client = es_factory.EsClientFactory(
         hosts=target_hosts,
         client_options=client_options,
         distribution_version=distribution_version,

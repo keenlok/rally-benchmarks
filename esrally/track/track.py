@@ -741,6 +741,21 @@ class OperationType(Enum):
     CreateIlmPolicy = (56, AdminStatus.Yes, serverless.Status.Blocked)
     DeleteIlmPolicy = (57, AdminStatus.Yes, serverless.Status.Blocked)
 
+    # opensearch functions
+    CreatePointInTime = (101, AdminStatus.No, serverless.Status.Public)
+    DeletePointInTime = (102, AdminStatus.No, serverless.Status.Public)
+    ListAllPointInTime = (103, AdminStatus.No, serverless.Status.Public)
+    VectorSearch = (104, AdminStatus.No, serverless.Status.Public)
+    BulkVectorDataSet = (105, AdminStatus.No, serverless.Status.Public)
+
+    # opensearch administrative functions
+    DeletePipeline = (106, AdminStatus.Yes, serverless.Status.Public)
+    CreateSearchPipeline = (107, AdminStatus.Yes, serverless.Status.Public)
+    DeleteMlModel = (108, AdminStatus.Yes, serverless.Status.Public)
+    RegisterMlModel = (109, AdminStatus.Yes, serverless.Status.Public)
+    DeployMlModel = (110, AdminStatus.Yes, serverless.Status.Public)
+
+
     def __init__(self, id: int, admin_status: AdminStatus, serverless_status: serverless.Status):
         self.id = id
         self.admin_status = admin_status
@@ -771,6 +786,10 @@ class OperationType(Enum):
             return OperationType.ScrollSearch
         elif v == "paginated-search":
             return OperationType.PaginatedSearch
+        elif v == "vector-search":
+            return OperationType.VectorSearch
+        elif v == "bulk-vector-data-set":
+            return OperationType.BulkVectorDataSet
         elif v == "composite-agg":
             return OperationType.CompositeAgg
         elif v == "cluster-health":
@@ -781,6 +800,8 @@ class OperationType(Enum):
             return OperationType.RawRequest
         elif v == "put-pipeline":
             return OperationType.PutPipeline
+        elif v == "delete-pipeline":
+            return OperationType.DeletePipeline
         elif v == "refresh":
             return OperationType.Refresh
         elif v == "create-index":
@@ -873,8 +894,41 @@ class OperationType(Enum):
             return OperationType.Downsample
         elif v == "esql":
             return OperationType.Esql
+        elif v == "create-point-in-time":
+            return OperationType.CreatePointInTime
+        elif v == "delete-point-in-time":
+            return OperationType.DeletePointInTime
+        elif v == "list-all-point-in-time":
+            return OperationType.ListAllPointInTime
+        elif v == "create-search-pipeline":
+            return OperationType.CreateSearchPipeline
+        elif v == "delete-ml-model":
+            return OperationType.DeleteMlModel
+        elif v == "register-ml-model":
+            return OperationType.RegisterMlModel
+        elif v == "deploy-ml-model":
+            return OperationType.DeployMlModel
         else:
             raise KeyError(f"No enum value for [{v}]")
+
+@unique
+class IndexCodec(Enum):
+    Default = "default"
+    BestCompression = "best_compression"
+    ZSTD = "zstd"
+    ZSTDNODICT = "zstd_no_dict"
+
+    @classmethod
+    def is_codec_valid(cls, codec):
+        available_codecs = cls.get_available_codecs()
+        if codec.lower() in available_codecs:
+            return True
+
+        raise ValueError(f"Invalid index.codec value '{codec}'. Choose from available codecs: {available_codecs}")
+
+    @classmethod
+    def get_available_codecs(cls):
+        return list(map(lambda codec: codec.value, cls))
 
 
 class TaskNameFilter:

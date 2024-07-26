@@ -47,7 +47,7 @@ from esrally import (
     types,
 )
 from esrally.client import delete_api_keys
-from esrally.driver import runner, scheduler
+from esrally.driver import es_runner, os_runner, scheduler
 from esrally.track import TrackProcessorRegistry, load_track, load_track_plugins
 from esrally.utils import console, convert, net
 
@@ -236,9 +236,11 @@ class DriverActor(actor.RallyActor):
         self.cluster_details = {}
 
     def receiveMsg_PoisonMessage(self, poisonmsg, sender):
-        self.logger.error("Main driver received a fatal indication from a load generator (%s). Shutting down.", poisonmsg.details)
+        self.logger.error("Main driver received a fatal indication from a load generator (%s). Shutting down.",
+                          poisonmsg.details)
         self.driver.close()
-        self.send(self.benchmark_actor, actor.BenchmarkFailure("Fatal track or load generator indication", poisonmsg.details))
+        self.send(self.benchmark_actor,
+                  actor.BenchmarkFailure("Fatal track or load generator indication", poisonmsg.details))
 
     def receiveMsg_BenchmarkFailure(self, msg, sender):
         self.logger.error("Main driver received a fatal exception from a load generator. Shutting down.")
@@ -262,7 +264,8 @@ class DriverActor(actor.RallyActor):
                 self.logger.debug("Worker [%d] has exited.", worker_index)
             else:
                 self.logger.error("Worker [%d] has exited prematurely. Aborting benchmark.", worker_index)
-                self.send(self.benchmark_actor, actor.BenchmarkFailure(f"Worker [{worker_index}] has exited prematurely."))
+                self.send(self.benchmark_actor,
+                          actor.BenchmarkFailure(f"Worker [{worker_index}] has exited prematurely."))
         else:
             self.logger.debug("A track preparator has exited.")
 
@@ -272,7 +275,15 @@ class DriverActor(actor.RallyActor):
     @actor.no_retry("driver")  # pylint: disable=no-value-for-parameter
     def receiveMsg_PrepareBenchmark(self, msg, sender):
         self.benchmark_actor = sender
-        self.driver = Driver(self, msg.config)
+        self.logger.info(f"What is received??? {msg}, {sender}")
+        database_type = msg.config.opts('driver', 'database.type')
+        self.logger.info(f"Creating client for {database_type} Database?, {database_type == 'elasticsearch'}")
+
+        client_factory_class = client.EsClientFactory
+        if database_type == "opensearch":
+            client_factory_class = client.OsClientFactory
+
+        self.driver = Driver(self, msg.config, client_factory_class=client_factory_class)
         self.driver.prepare_benchmark(msg.track)
 
     @actor.no_retry("driver")  # pylint: disable=no-value-for-parameter
@@ -323,7 +334,8 @@ class DriverActor(actor.RallyActor):
 
     def on_task_finished(self, metrics, next_task_scheduled_in):
         if next_task_scheduled_in > 0:
-            self.wakeupAfter(datetime.timedelta(seconds=next_task_scheduled_in), payload=DriverActor.RESET_RELATIVE_TIME_MARKER)
+            self.wakeupAfter(datetime.timedelta(seconds=next_task_scheduled_in),
+                             payload=DriverActor.RESET_RELATIVE_TIME_MARKER)
         else:
             self.driver.reset_relative_time()
         self.send(self.benchmark_actor, TaskFinished(metrics, next_task_scheduled_in))
@@ -477,7 +489,8 @@ class TrackPreparationActor(actor.RallyActor):
         self.track = None
 
     def receiveMsg_PoisonMessage(self, poisonmsg, sender):
-        self.logger.error("Track Preparator received a fatal indication from a load generator (%s). Shutting down.", poisonmsg.details)
+        self.logger.error("Track Preparator received a fatal indication from a load generator (%s). Shutting down.",
+                          poisonmsg.details)
         self.send(self.driver_actor, actor.BenchmarkFailure("Fatal track preparation indication", poisonmsg.details))
 
     @actor.no_retry("track preparator")  # pylint: disable=no-value-for-parameter
@@ -511,7 +524,8 @@ class TrackPreparationActor(actor.RallyActor):
         # the track might have been loaded on a different machine (the coordinator machine) so we force a track
         # update to ensure we use the latest version of plugins.
         load_track(self.cfg)
-        load_track_plugins(self.cfg, self.track.name, register_track_processor=tpr.register_track_processor, force_update=True)
+        load_track_plugins(self.cfg, self.track.name, register_track_processor=tpr.register_track_processor,
+                           force_update=True)
         # we expect on_prepare_track can take a long time. seed a queue of tasks and delegate to child workers
         self.children = [self._create_task_executor() for _ in range(num_cores(self.cfg))]
         for processor in tpr.processors:
@@ -526,13 +540,15 @@ class TrackPreparationActor(actor.RallyActor):
         if not self.processors.empty():
             self._seed_tasks(self.processors.get())
             self.send_to_children_and_transition(
-                self, StartTaskLoop(self.track.name, self.cfg), self.Status.PROCESSOR_COMPLETE, self.Status.PROCESSOR_RUNNING
+                self, StartTaskLoop(self.track.name, self.cfg), self.Status.PROCESSOR_COMPLETE,
+                self.Status.PROCESSOR_RUNNING
             )
         else:
             self.send(self.driver_actor, TrackPrepared())
 
     def _seed_tasks(self, processor):
-        self.tasks = list(WorkerTask(func, params) for func, params in processor.on_prepare_track(self.track, self.data_root_dir))
+        self.tasks = list(
+            WorkerTask(func, params) for func, params in processor.on_prepare_track(self.track, self.data_root_dir))
 
     def _create_task_executor(self):
         return self.createActor(TaskExecutionActor)
@@ -550,7 +566,8 @@ class TrackPreparationActor(actor.RallyActor):
 
     @actor.no_retry("track preparator")  # pylint: disable=no-value-for-parameter
     def receiveMsg_WorkerIdle(self, msg, sender):
-        self.transition_when_all_children_responded(sender, msg, self.Status.PROCESSOR_RUNNING, self.Status.PROCESSOR_COMPLETE, self.resume)
+        self.transition_when_all_children_responded(sender, msg, self.Status.PROCESSOR_RUNNING,
+                                                    self.Status.PROCESSOR_COMPLETE, self.resume)
 
 
 def num_cores(cfg: types.Config):
@@ -568,7 +585,7 @@ class ClientContext:
 
 
 class Driver:
-    def __init__(self, driver_actor, config: types.Config, es_client_factory_class=client.EsClientFactory):
+    def __init__(self, driver_actor, config: types.Config, client_factory_class=client.EsClientFactory):
         """
         Coordinates all workers. It is technology-agnostic, i.e. it does not know anything about actors. To allow us to hook in an actor,
         we provide a ``target`` parameter which will be called whenever some event has occurred. The ``target`` can use this to send
@@ -580,7 +597,7 @@ class Driver:
         self.logger = logging.getLogger(__name__)
         self.driver_actor = driver_actor
         self.config = config
-        self.es_client_factory = es_client_factory_class
+        self.client_factory = client_factory_class
         self.default_sync_es_client = None
         self.track = None
         self.challenge = None
@@ -619,12 +636,55 @@ class Driver:
             cluster_client_options = dict(all_client_options[cluster_name])
             # Use retries to avoid aborts on long living connections for telemetry devices
             cluster_client_options["retry_on_timeout"] = True
-            es[cluster_name] = self.es_client_factory(
-                cluster_hosts, cluster_client_options, distribution_version=distribution_version, distribution_flavor=distribution_flavor
+            es[cluster_name] = self.client_factory(
+                cluster_hosts, cluster_client_options, distribution_version=distribution_version,
+                distribution_flavor=distribution_flavor
             ).create()
         return es
 
-    def prepare_telemetry(self, es, enable, index_names, data_stream_names, build_hash, serverless_mode, serverless_operator):
+    def create_os_clients(self):
+        all_hosts = self.config.opts("client", "hosts").all_hosts
+        opensearch = {}
+        for cluster_name, cluster_hosts in all_hosts.items():
+            all_client_options = self.config.opts("client", "options").all_client_options
+            cluster_client_options = dict(all_client_options[cluster_name])
+            # Use retries to avoid aborts on long living connections for telemetry devices
+            cluster_client_options["retry-on-timeout"] = True
+            opensearch[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
+        return opensearch
+
+    def create_pg_clients(self):
+        all_hosts = self.config.opts("client", "hosts").all_hosts
+        pg = {}
+        for cluster_name, cluster_hosts in all_hosts.items():
+            all_client_options = self.config.opts("client", "options").all_client_options
+            cluster_client_options = dict(all_client_options[cluster_name])
+            # Use retries to avoid aborts on long living connections for telemetry devices
+            cluster_client_options["retry-on-timeout"] = True
+            pg[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
+        return pg
+
+    def create_mongo_client(self):
+        all_hosts = self.config.opts("client", "hosts").all_hosts
+        mongo = {}
+        logging.info("Creating Clients in Driver!")
+        for cluster_name, cluster_hosts in all_hosts.items():
+            all_client_options = self.config.opts("client", "options").all_client_options
+            cluster_client_options = dict(all_client_options[cluster_name])
+            # Use retries to avoid aborts on long living connections for telemetry devices
+            cluster_client_options["retry_on_timeout"] = True
+            mongo[cluster_name] = self.client_factory(cluster_hosts, cluster_client_options).create()
+        return mongo
+
+    def prepare_telemetry(self):
+        enabled_devices = []
+        devices = []
+        self.telemetry = telemetry.Telemetry(enabled_devices, devices=devices)
+
+        # todo: make this the wrapper for the various DBs so we only call prepare_telemetry once
+
+    def _prepare_telemetry_es(self, es, enable, index_names, data_stream_names, build_hash, serverless_mode,
+                              serverless_operator):
         enabled_devices = self.config.opts("telemetry", "devices")
         telemetry_params = self.config.opts("telemetry", "params")
         log_root = paths.race_root(self.config)
@@ -648,7 +708,8 @@ class Driver:
                 telemetry.SearchableSnapshotsStats(telemetry_params, es, self.metrics_store),
                 telemetry.DataStreamStats(telemetry_params, es, self.metrics_store),
                 telemetry.IngestPipelineStats(es, self.metrics_store),
-                telemetry.DiskUsageStats(telemetry_params, es_default, self.metrics_store, index_names, data_stream_names),
+                telemetry.DiskUsageStats(telemetry_params, es_default, self.metrics_store, index_names,
+                                         data_stream_names),
                 telemetry.BlobStoreStats(telemetry_params, es, self.metrics_store),
                 telemetry.GeoIpStats(es_default, self.metrics_store),
             ]
@@ -661,18 +722,44 @@ class Driver:
             serverless_operator=serverless_operator,
         )
 
-    def wait_for_rest_api(self, es):
-        es_default = es["default"]
+    def _prepare_telemetry_os(self, opensearch, enable):
+        enabled_devices = self.config.opts("telemetry", "devices")
+        telemetry_params = self.config.opts("telemetry", "params")
+        log_root = paths.race_root(self.config)
+
+        os_default = opensearch["default"]
+
+        if enable:
+            devices = [
+                telemetry.NodeStats(telemetry_params, opensearch, self.metrics_store),
+                telemetry.ExternalEnvironmentInfo(os_default, self.metrics_store),
+                telemetry.ClusterEnvironmentInfo(os_default, self.metrics_store, None),
+                telemetry.JvmStatsSummary(os_default, self.metrics_store),
+                telemetry.IndexStats(os_default, self.metrics_store),
+                telemetry.MlBucketProcessingTime(os_default, self.metrics_store),
+                telemetry.SegmentStats(log_root, os_default),
+                telemetry.CcrStats(telemetry_params, opensearch, self.metrics_store),
+                telemetry.RecoveryStats(telemetry_params, opensearch, self.metrics_store),
+                telemetry.TransformStats(telemetry_params, opensearch, self.metrics_store),
+                telemetry.SearchableSnapshotsStats(telemetry_params, opensearch, self.metrics_store),
+                telemetry.SegmentReplicationStats(telemetry_params, opensearch, self.metrics_store)
+            ]
+        else:
+            devices = []
+        self.telemetry = telemetry.Telemetry(enabled_devices, devices=devices)
+
+    def wait_for_rest_api(self, eos):
+        eos_default = eos["default"]
         self.logger.info("Checking if REST API is available.")
-        if client.wait_for_rest_layer(es_default, max_attempts=40):
+        if self.client_factory.wait_for_rest_layer(eos_default, max_attempts=40):
             self.logger.info("REST API is available.")
         else:
             self.logger.error("REST API layer is not yet available. Stopping benchmark.")
-            raise exceptions.SystemSetupError("Elasticsearch REST API layer is not available.")
+            raise exceptions.SystemSetupError("Elasticsearch/Opensearch REST API layer is not available.")
 
-    def retrieve_cluster_info(self, es):
+    def retrieve_cluster_info(self, eos):
         try:
-            return es["default"].info()
+            return eos["default"].info()
         except BaseException:
             self.logger.exception("Could not retrieve cluster info on benchmark start")
             return None
@@ -704,51 +791,83 @@ class Driver:
         self.track = t
         self.challenge = select_challenge(self.config, self.track)
         self.quiet = self.config.opts("system", "quiet.mode", mandatory=False, default_value=False)
-        downsample_factor = int(self.config.opts("reporting", "metrics.request.downsample.factor", mandatory=False, default_value=1))
-        self.metrics_store = metrics.metrics_store(cfg=self.config, track=self.track.name, challenge=self.challenge.name, read_only=False)
+        downsample_factor = int(
+            self.config.opts("reporting", "metrics.request.downsample.factor", mandatory=False, default_value=1))
+        self.metrics_store = metrics.metrics_store(cfg=self.config, track=self.track.name,
+                                                   challenge=self.challenge.name, read_only=False)
 
         self.sample_post_processor = SamplePostprocessor(
             self.metrics_store, downsample_factor, self.track.meta_data, self.challenge.meta_data
         )
 
-        es_clients = self.create_es_clients()
-        self.default_sync_es_client = es_clients["default"]
+        database_type = self.config.opts('driver', 'database.type')
+        self.logger.info(f"Creating client for {database_type} Database?, {database_type == 'elasticsearch'}")
 
-        skip_rest_api_check = self.config.opts("mechanic", "skip.rest.api.check")
-        uses_static_responses = self.config.opts("client", "options").uses_static_responses
-        serverless_mode = convert.to_bool(self.config.opts("driver", "serverless.mode", mandatory=False, default_value=False))
-        serverless_operator = convert.to_bool(self.config.opts("driver", "serverless.operator", mandatory=False, default_value=False))
-        build_hash = None
-        if skip_rest_api_check:
-            self.logger.info("Skipping REST API check as requested explicitly.")
-        elif uses_static_responses:
-            self.logger.info("Skipping REST API check as static responses are used.")
-        else:
-            if serverless_mode and not serverless_operator:
-                self.logger.info("Skipping REST API check while targetting serverless cluster with a public user.")
+        if database_type == "elasticsearch":
+            es_clients = self.create_es_clients()
+            self.default_sync_es_client = es_clients["default"]
+
+            skip_rest_api_check = self.config.opts("mechanic", "skip.rest.api.check")
+            uses_static_responses = self.config.opts("client", "options").uses_static_responses
+            serverless_mode = convert.to_bool(
+                self.config.opts("driver", "serverless.mode", mandatory=False, default_value=False))
+            serverless_operator = convert.to_bool(
+                self.config.opts("driver", "serverless.operator", mandatory=False, default_value=False))
+            build_hash = None
+            if skip_rest_api_check:
+                self.logger.info("Skipping REST API check as requested explicitly.")
+            elif uses_static_responses:
+                self.logger.info("Skipping REST API check as static responses are used.")
             else:
-                self.wait_for_rest_api(es_clients)
-            self.driver_actor.cluster_details = self.retrieve_cluster_info(es_clients)
-            if serverless_mode:
-                # overwrite static serverless version number
-                self.driver_actor.cluster_details["version"]["number"] = "serverless"
-                if serverless_operator:
-                    # overwrite build hash if running as operator
-                    build_hash = self.retrieve_build_hash_from_nodes_info(es_clients)
-                    self.logger.info("Retrieved actual build hash [%s] from serverless cluster.", build_hash)
-                    self.driver_actor.cluster_details["version"]["build_hash"] = build_hash
+                if serverless_mode and not serverless_operator:
+                    self.logger.info("Skipping REST API check while targetting serverless cluster with a public user.")
+                else:
+                    self.wait_for_rest_api(es_clients)
+                self.driver_actor.cluster_details = self.retrieve_cluster_info(es_clients)
+                if serverless_mode:
+                    # overwrite static serverless version number
+                    self.driver_actor.cluster_details["version"]["number"] = "serverless"
+                    if serverless_operator:
+                        # overwrite build hash if running as operator
+                        build_hash = self.retrieve_build_hash_from_nodes_info(es_clients)
+                        self.logger.info("Retrieved actual build hash [%s] from serverless cluster.", build_hash)
+                        self.driver_actor.cluster_details["version"]["build_hash"] = build_hash
 
-        # Avoid issuing any requests to the target cluster when static responses are enabled. The results
-        # are not useful and attempts to connect to a non-existing cluster just lead to exception traces in logs.
-        self.prepare_telemetry(
-            es_clients,
-            enable=not uses_static_responses,
-            index_names=self.track.index_names(),
-            data_stream_names=self.track.data_stream_names(),
-            build_hash=build_hash,
-            serverless_mode=serverless_mode,
-            serverless_operator=serverless_operator,
-        )
+            # Avoid issuing any requests to the target cluster when static responses are enabled. The results
+            # are not useful and attempts to connect to a non-existing cluster just lead to exception traces in logs.
+            self._prepare_telemetry_es(
+                es_clients,
+                enable=not uses_static_responses,
+                index_names=self.track.index_names(),
+                data_stream_names=self.track.data_stream_names(),
+                build_hash=build_hash,
+                serverless_mode=serverless_mode,
+                serverless_operator=serverless_operator,
+            )
+        elif database_type == "postgres":
+            self.prepare_telemetry()
+        elif database_type == "opensearch":
+            os_clients = self.create_os_clients()
+
+            skip_rest_api_check = self.config.opts("mechanic", "skip.rest.api.check")
+            uses_static_responses = self.config.opts("client", "options").uses_static_responses
+            if skip_rest_api_check:
+                self.logger.info("Skipping REST API check as requested explicitly.")
+            elif uses_static_responses:
+                self.logger.info("Skipping REST API check as static responses are used.")
+            else:
+                self.wait_for_rest_api(os_clients)
+                self.driver_actor.cluster_details = self.retrieve_cluster_info(os_clients)
+
+            # Avoid issuing any requests to the target cluster when static responses are enabled. The results
+            # are not useful and attempts to connect to a non-existing cluster just lead to exception traces in logs.
+            self._prepare_telemetry_os(os_clients, enable=not uses_static_responses)
+
+        elif database_type == "mongo":
+            pass
+        else:
+            self.logger.error(f"Database driver for {database_type} not implemented yet")
+            exit(1)
 
         for host in self.config.opts("driver", "load_driver_hosts"):
             host_config = {
@@ -786,7 +905,8 @@ class Driver:
         if allocator.clients < 128:
             self.logger.debug("Allocation matrix:\n%s", "\n".join([str(a) for a in self.allocations]))
 
-        create_api_keys = self.config.opts("client", "options").all_client_options["default"].get("create_api_key_per_client", None)
+        create_api_keys = self.config.opts("client", "options").all_client_options["default"].get(
+            "create_api_key_per_client", None)
         worker_assignments = calculate_worker_assignments(self.load_driver_hosts, allocator.clients)
         worker_id = 0
         for assignment in worker_assignments:
@@ -794,7 +914,8 @@ class Driver:
             for clients in assignment["workers"]:
                 # don't assign workers without any clients
                 if len(clients) > 0:
-                    self.logger.debug("Allocating worker [%d] on [%s] with [%d] clients.", worker_id, host, len(clients))
+                    self.logger.debug("Allocating worker [%d] on [%s] with [%d] clients.", worker_id, host,
+                                      len(clients))
                     worker = self.driver_actor.create_client(host, self.config, worker_id)
 
                     client_allocations = ClientAllocations()
@@ -811,7 +932,8 @@ class Driver:
                         worker_client_contexts[client_id] = client_context
                         self.client_contexts[worker_id] = worker_client_contexts
                     self.driver_actor.start_worker(
-                        worker, worker_id, self.config, self.track, client_allocations, client_contexts=worker_client_contexts
+                        worker, worker_id, self.config, self.track, client_allocations,
+                        client_contexts=worker_client_contexts
                     )
                     self.workers.append(worker)
                     worker_id += 1
@@ -829,7 +951,8 @@ class Driver:
             self.number_of_steps,
         )
         if self.currently_completed == len(self.workers):
-            self.logger.info("All workers completed their tasks until join point [%d/%d].", self.current_step + 1, self.number_of_steps)
+            self.logger.info("All workers completed their tasks until join point [%d/%d].", self.current_step + 1,
+                             self.number_of_steps)
             # we can go on to the next step
             self.currently_completed = 0
             self.complete_current_task_sent = False
@@ -952,7 +1075,8 @@ class Driver:
                 # As we are waiting for other clients to finish, we would send this message over and over again.
                 # Hence we need to memorize whether we have already sent it for the current step.
                 self.complete_current_task_sent = True
-                self.logger.info("All affected clients have finished. Notifying all clients to complete their current tasks.")
+                self.logger.info(
+                    "All affected clients have finished. Notifying all clients to complete their current tasks.")
                 for worker in self.workers:
                     self.driver_actor.complete_current_task(worker)
             else:
@@ -991,7 +1115,8 @@ class Driver:
                 # structure, we should not count them. The reason is that progress depends entirely on the client(s) that execute the
                 # task that is completing the parallel structure.
                 progress_per_client = [
-                    s.percent_completed for s in self.most_recent_sample_per_client.values() if s.percent_completed is not None
+                    s.percent_completed for s in self.most_recent_sample_per_client.values() if
+                    s.percent_completed is not None
                 ]
 
                 num_clients = max(len(progress_per_client), 1)
@@ -1097,7 +1222,8 @@ class SamplePostprocessor:
         self.logger.debug("Calculating throughput took [%f] seconds.", (end - start))
         start = end
         for task, samples in aggregates.items():
-            meta_data = self.merge(self.track_meta_data, self.challenge_meta_data, task.operation.meta_data, task.meta_data)
+            meta_data = self.merge(self.track_meta_data, self.challenge_meta_data, task.operation.meta_data,
+                                   task.meta_data)
             for absolute_time, relative_time, sample_type, throughput, throughput_unit in samples:
                 self.metrics_store.put_value_cluster_level(
                     name="throughput",
@@ -1253,7 +1379,8 @@ class Worker(actor.RallyActor):
         assert self.config is not None
         self.logger.info("Worker[%d] is about to start.", msg.worker_id)
         self.on_error = self.config.opts("driver", "on.error")
-        self.sample_queue_size = int(self.config.opts("reporting", "sample.queue.size", mandatory=False, default_value=1 << 20))
+        self.sample_queue_size = int(
+            self.config.opts("reporting", "sample.queue.size", mandatory=False, default_value=1 << 20))
         self.track = msg.track
         track.set_absolute_data_path(self.config, self.track)
         self.client_allocations = msg.client_allocations
@@ -1263,9 +1390,13 @@ class Worker(actor.RallyActor):
         # we need to wake up more often in test mode
         if self.config.opts("track", "test.mode.enabled"):
             self.wakeup_interval = 0.5
-        runner.register_default_runners(self.config)
-        if self.track.has_plugins:
-            track.load_track_plugins(self.config, self.track.name, runner.register_runner, scheduler.register_scheduler)
+        database_type = self.config.opts("driver", "database.type")
+        if database_type == "opensearch":
+            os_runner.register_default_runners()
+        else:
+            es_runner.register_default_runners()
+            if self.track.has_plugins:
+                track.load_track_plugins(self.config, self.track.name, es_runner.register_runner, scheduler.register_scheduler)
         self.drive()
 
     @actor.no_retry("worker")  # pylint: disable=no-value-for-parameter
@@ -1293,7 +1424,8 @@ class Worker(actor.RallyActor):
             )
         else:
             self.logger.info(
-                "Worker[%s] has received CompleteCurrentTask. Completing tasks at index [%d].", str(self.worker_id), self.current_task_index
+                "Worker[%s] has received CompleteCurrentTask. Completing tasks at index [%d].", str(self.worker_id),
+                self.current_task_index
             )
             self.complete.set()
 
@@ -1306,17 +1438,20 @@ class Worker(actor.RallyActor):
         else:
             current_samples = self.send_samples()
             if self.cancel.is_set():
-                self.logger.info("Worker[%s] has detected that benchmark has been cancelled. Notifying master...", str(self.worker_id))
+                self.logger.info("Worker[%s] has detected that benchmark has been cancelled. Notifying master...",
+                                 str(self.worker_id))
                 self.send(self.driver_actor, actor.BenchmarkCancelled())
             elif self.executor_future is not None and self.executor_future.done():
                 e = self.executor_future.exception(timeout=0)
                 if e:
                     self.logger.exception(
-                        "Worker[%s] has detected a benchmark failure. Notifying master...", str(self.worker_id), exc_info=e
+                        "Worker[%s] has detected a benchmark failure. Notifying master...", str(self.worker_id),
+                        exc_info=e
                     )
                     # the exception might be user-defined and not be on the load path of the master driver. Hence, it cannot be
                     # deserialized on the receiver so we convert it here to a plain string.
-                    self.send(self.driver_actor, actor.BenchmarkFailure(f"Error in load generator [{self.worker_id}]", str(e)))
+                    self.send(self.driver_actor,
+                              actor.BenchmarkFailure(f"Error in load generator [{self.worker_id}]", str(e)))
                 else:
                     self.logger.debug("Worker[%s] is ready for the next task.", str(self.worker_id))
                     self.executor_future = None
@@ -1334,7 +1469,8 @@ class Worker(actor.RallyActor):
                     else:
                         # TODO: This could be misleading given that one worker could execute more than one task...
                         self.logger.debug(
-                            "Worker[%s] is executing [%s] (dependent eternal task).", str(self.worker_id), most_recent_sample.task
+                            "Worker[%s] is executing [%s] (dependent eternal task).", str(self.worker_id),
+                            most_recent_sample.task
                         )
                 else:
                     self.logger.debug("Worker[%s] is executing (no samples).", str(self.worker_id))
@@ -1382,7 +1518,8 @@ class Worker(actor.RallyActor):
                     self.current_task_index,
                 )
             else:
-                self.logger.debug("Worker[%d] is executing tasks at index [%d].", self.worker_id, self.current_task_index)
+                self.logger.debug("Worker[%d] is executing tasks at index [%d].", self.worker_id,
+                                  self.current_task_index)
                 self.sampler = Sampler(start_timestamp=time.perf_counter(), buffer_size=self.sample_queue_size)
                 executor = AsyncIoAdapter(
                     self.config,
@@ -1429,22 +1566,22 @@ class Sampler:
         self.logger = logging.getLogger(__name__)
 
     def add(
-        self,
-        task,
-        client_id,
-        sample_type,
-        meta_data,
-        absolute_time,
-        request_start,
-        latency,
-        service_time,
-        processing_time,
-        throughput,
-        ops,
-        ops_unit,
-        time_period,
-        percent_completed,
-        dependent_timing=None,
+            self,
+            task,
+            client_id,
+            sample_type,
+            meta_data,
+            absolute_time,
+            request_start,
+            latency,
+            service_time,
+            processing_time,
+            throughput,
+            ops,
+            ops_unit,
+            time_period,
+            percent_completed,
+            dependent_timing=None,
     ):
         try:
             self.q.put_nowait(
@@ -1483,25 +1620,25 @@ class Sampler:
 
 class Sample:
     def __init__(
-        self,
-        client_id,
-        absolute_time,
-        request_start,
-        task_start,
-        task,
-        sample_type,
-        request_meta_data,
-        latency,
-        service_time,
-        processing_time,
-        throughput,
-        total_ops,
-        total_ops_unit,
-        time_period,
-        percent_completed,
-        dependent_timing=None,
-        operation_name=None,
-        operation_type=None,
+            self,
+            client_id,
+            absolute_time,
+            request_start,
+            task_start,
+            task,
+            sample_type,
+            request_meta_data,
+            latency,
+            service_time,
+            processing_time,
+            throughput,
+            total_ops,
+            total_ops_unit,
+            time_period,
+            percent_completed,
+            dependent_timing=None,
+            operation_name=None,
+            operation_type=None,
     ):
         self.client_id = client_id
         self.absolute_time = absolute_time
@@ -1755,7 +1892,8 @@ class ThroughputCalculator:
 
 
 class AsyncIoAdapter:
-    def __init__(self, cfg: types.Config, track, task_allocations, sampler, cancel, complete, abort_on_error, client_contexts, worker_id):
+    def __init__(self, cfg: types.Config, track, task_allocations, sampler, cancel, complete, abort_on_error,
+                 client_contexts, worker_id):
         self.cfg = cfg
         self.track = track
         self.task_allocations = task_allocations
@@ -1765,6 +1903,7 @@ class AsyncIoAdapter:
         self.abort_on_error = abort_on_error
         self.client_contexts = client_contexts
         self.parent_worker_id = worker_id
+        self.database_type = self.cfg.opts("driver", "database.type")
         self.profiling_enabled = self.cfg.opts("driver", "profiling")
         self.assertions_enabled = self.cfg.opts("driver", "assertions")
         self.debug_event_loop = self.cfg.opts("system", "async.debug", mandatory=False, default_value=False)
@@ -1800,9 +1939,30 @@ class AsyncIoAdapter:
                 ).create_async(api_key=api_key, client_id=client_id)
             return es
 
+        def os_clients(client_id, all_hosts, all_client_options):
+            opensearch = {}
+            for cluster_name, cluster_hosts in all_hosts.items():
+                opensearch[cluster_name] = client.OsClientFactory(
+                    cluster_hosts,
+                    all_client_options[cluster_name]
+                ).create_async()
+            return opensearch
+
+        def pg_clients(client_id, all_hosts, all_client_options):
+            pg = {}
+            for cluster_name, cluster_hosts in all_hosts.items():
+                pg[cluster_name] = client.PgClientFactory(
+                    cluster_hosts,
+                    all_client_options[cluster_name]
+                ).create_async()
+            return pg
+
         if self.assertions_enabled:
             self.logger.info("Task assertions enabled")
-        runner.enable_assertions(self.assertions_enabled)
+        if self.database_type == "elasticsearch":
+            es_runner.enable_assertions(self.assertions_enabled)
+        if self.database_type == "opensearch":
+            os_runner.enable_assertions(self.assertions_enabled)
 
         clients = []
         awaitables = []
@@ -1813,18 +1973,48 @@ class AsyncIoAdapter:
             if task not in params_per_task:
                 param_source = track.operation_parameters(self.track, task)
                 params_per_task[task] = param_source
-            schedule = schedule_for(task_allocation, params_per_task[task])
-            es = es_clients(
-                client_id,
-                self.cfg.opts("client", "hosts").all_hosts,
-                self.cfg.opts("client", "options"),
-                self.cfg.opts("mechanic", "distribution.version", mandatory=False),
-                self.cfg.opts("mechanic", "distribution.flavor", mandatory=False),
-            )
-            clients.append(es)
-            async_executor = AsyncExecutor(
-                client_id, task, schedule, es, self.sampler, self.cancel, self.complete, task.error_behavior(self.abort_on_error)
-            )
+            schedule = schedule_for(task_allocation, params_per_task[task], self.database_type)
+            if self.database_type == "elasticsearch":
+                self.logger.info("Initialisting ES Clients for Async tasks")
+                es = es_clients(
+                    client_id,
+                    self.cfg.opts("client", "hosts").all_hosts,
+                    self.cfg.opts("client", "options"),
+                    self.cfg.opts("mechanic", "distribution.version", mandatory=False),
+                    self.cfg.opts("mechanic", "distribution.flavor", mandatory=False),
+                )
+                clients.append(es)
+                async_executor = AsyncExecutor(
+                    client_id, task, schedule, es, self.sampler, self.cancel, self.complete,
+                    task.error_behavior(self.abort_on_error)
+                )
+            elif self.database_type == "opensearch":
+                self.logger.info("Initialising Opensearch Clients for Async tasks")
+
+                client_count = len(self.task_allocations)
+                opensearch = os_clients(
+                    client_id,
+                    self.cfg.opts("client", "hosts").all_hosts,
+                    self.cfg.opts("client", "options").with_max_connections(client_count))
+                async_executor = AsyncExecutor(
+                    client_id, task, schedule, opensearch, self.sampler, self.cancel, self.complete,
+                    task.error_behavior(self.abort_on_error))
+
+            elif self.database_type == "postgres":
+                self.logger.info("Initialising postgres Clients for Async tasks")
+
+                client_count = len(self.task_allocations)
+                pg = pg_clients(
+                    client_id,
+                    self.cfg.opts("client", "hosts").all_hosts,
+                    self.cfg.opts("client", "options").with_max_connections(client_count))
+                async_executor = AsyncExecutor(
+                    client_id, task, schedule, pg, self.sampler, self.cancel, self.complete,
+                    task.error_behavior(self.abort_on_error))
+            else:
+                self.logger.info("Unimplemented Async Client")
+                exit(1)
+
             final_executor = AsyncProfiler(async_executor) if self.profiling_enabled else async_executor
             awaitables.append(final_executor())
         task_names = [t.task.task.name for t in self.task_allocations]
@@ -1835,16 +2025,22 @@ class AsyncIoAdapter:
         finally:
             run_end = time.perf_counter()
             self.logger.info(
-                "Worker[%s] finished executing tasks %s in %f seconds", self.parent_worker_id, task_names, (run_end - run_start)
+                "Worker[%s] finished executing tasks %s in %f seconds", self.parent_worker_id, task_names,
+                (run_end - run_start)
             )
             await asyncio.get_event_loop().shutdown_asyncgens()
             shutdown_asyncgens_end = time.perf_counter()
             self.logger.debug("Total time to shutdown asyncgens: %f seconds.", (shutdown_asyncgens_end - run_end))
             for c in clients:
-                for es in c.values():
-                    await es.close()
+                if self.database_type == "elasticsearch":
+                    for es in c.values():
+                        await es.close()
+                elif self.database_type == "opensearch":
+                    for s in opensearch.values():
+                        await s.transport.close()
             transport_close_end = time.perf_counter()
-            self.logger.debug("Total time to close transports: %f seconds.", (transport_close_end - shutdown_asyncgens_end))
+            self.logger.debug("Total time to close transports: %f seconds.",
+                              (transport_close_end - shutdown_asyncgens_end))
 
 
 class AsyncProfiler:
@@ -1879,13 +2075,13 @@ class AsyncProfiler:
 
 
 class AsyncExecutor:
-    def __init__(self, client_id, task, schedule, es, sampler, cancel, complete, on_error):
+    def __init__(self, client_id, task, schedule, db_client, sampler, cancel, complete, on_error):
         """
         Executes tasks according to the schedule for a given operation.
 
         :param task: The task that is executed.
         :param schedule: The schedule for this task.
-        :param es: Elasticsearch client that will be used to execute the operation.
+        :param db_client: DB client that will be used to execute the operation.
         :param sampler: A container to store raw samples.
         :param cancel: A shared boolean that indicates we need to cancel execution.
         :param complete: A shared boolean that indicates we need to prematurely complete execution.
@@ -1895,7 +2091,7 @@ class AsyncExecutor:
         self.task = task
         self.op = task.operation
         self.schedule_handle = schedule
-        self.es = es
+        self.db_client = db_client
         self.sampler = sampler
         self.cancel = cancel
         self.complete = complete
@@ -1933,8 +2129,9 @@ class AsyncExecutor:
                 absolute_processing_start = time.time()
                 processing_start = time.perf_counter()
                 self.schedule_handle.before_request(processing_start)
-                with self.es["default"].new_request_context() as request_context:
-                    total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.es, params, self.on_error)
+                with self.db_client["default"].new_request_context() as request_context:
+                    total_ops, total_ops_unit, request_meta_data = await execute_single(runner, self.db_client, params,
+                                                                                        self.on_error)
                     request_start = request_context.request_start
                     request_end = request_context.request_end
 
@@ -2016,7 +2213,7 @@ class AsyncExecutor:
                 self.complete.set()
 
 
-async def execute_single(runner, es, params, on_error):
+async def execute_single(runner, eos, params, on_error):
     """
     Invokes the given runner once and provides the runner's return value in a uniform structure.
 
@@ -2028,7 +2225,7 @@ async def execute_single(runner, es, params, on_error):
     fatal_error = False
     try:
         async with runner:
-            return_value = await runner(es, params)
+            return_value = await runner(eos, params)
         if isinstance(return_value, tuple) and len(return_value) == 2:
             total_ops, total_ops_unit = return_value
             request_meta_data = {"success": True}
@@ -2116,8 +2313,10 @@ async def execute_single(runner, es, params, on_error):
             request_meta_data["http-status"] = e.status_code
 
     except KeyError as e:
-        logging.getLogger(__name__).exception("Cannot execute runner [%s]; most likely due to missing parameters.", str(runner))
-        msg = "Cannot execute [%s]. Provided parameters are: %s. Error: [%s]." % (str(runner), list(params.keys()), str(e))
+        logging.getLogger(__name__).exception("Cannot execute runner [%s]; most likely due to missing parameters.",
+                                              str(runner))
+        msg = "Cannot execute [%s]. Provided parameters are: %s. Error: [%s]." % (
+            str(runner), list(params.keys()), str(e))
         raise exceptions.SystemSetupError(msg)
 
     if not request_meta_data["success"]:
@@ -2182,7 +2381,8 @@ class TaskAllocation:
         return hash(self.task) ^ hash(self.global_client_index)
 
     def __eq__(self, other):
-        return isinstance(other, type(self)) and self.task == other.task and self.global_client_index == other.global_client_index
+        return isinstance(other, type(
+            self)) and self.task == other.task and self.global_client_index == other.global_client_index
 
     def __repr__(self, *args, **kwargs):
         return (
@@ -2323,7 +2523,7 @@ class Allocator:
 
 # Runs a concrete schedule on one worker client
 # Needs to determine the runners and concrete iterations per client.
-def schedule_for(task_allocation, parameter_source):
+def schedule_for(task_allocation, parameter_source, database_type):
     """
     Calculates a client's schedule for a given task.
 
@@ -2350,7 +2550,11 @@ def schedule_for(task_allocation, parameter_source):
     # repetitive and may cause issues in thespian with many clients (an excessive number of actor messages is sent).
     if client_index == 0:
         logger.debug("Choosing [%s] for [%s].", sched, task)
-    runner_for_op = runner.runner_for(op.type)
+    if database_type == "opensearch":
+        runner_for_op = os_runner.runner_for(op.type)
+    else:
+        runner_for_op = es_runner.runner_for(op.type)
+
     params_for_op = parameter_source.partition(client_index, task.clients)
     if hasattr(sched, "parameter_source"):
         if client_index == 0:
@@ -2393,7 +2597,8 @@ def schedule_for(task_allocation, parameter_source):
         if loop_control.infinite:
             logger.debug("Parameter source will determine when the schedule for [%s] terminates.", task.name)
         else:
-            logger.debug("%s schedule will determine when the schedule for [%s] terminates.", str(loop_control), task.name)
+            logger.debug("%s schedule will determine when the schedule for [%s] terminates.", str(loop_control),
+                         task.name)
 
     return ScheduleHandle(task_allocation, sched, loop_control, runner_for_op, params_for_op)
 
