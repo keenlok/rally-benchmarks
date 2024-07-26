@@ -2001,15 +2001,15 @@ def percentiles_for_sample_size(sample_size):
     if sample_size == 1:
         return [100]
     elif 1 < sample_size < 10:
-        return [50, 100]
+        return [25, 50, 75, 100]
     elif 10 <= sample_size < 100:
-        return [50, 90, 100]
+        return [25, 50, 75, 90, 100]
     elif 100 <= sample_size < 1000:
-        return [50, 90, 99, 100]
+        return [25, 50, 75, 90, 95, 99, 100]
     elif 1000 <= sample_size < 10000:
-        return [50, 90, 99, 99.9, 100]
+        return [25, 50, 75, 90, 95, 99, 99.9, 100]
     else:
-        return [50, 90, 99, 99.9, 99.99, 100]
+        return [25, 50, 75, 90, 95, 99, 99.9, 99.99, 100]
 
 
 class GlobalStatsCalculator:
