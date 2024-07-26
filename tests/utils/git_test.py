@@ -22,8 +22,8 @@ from unittest import mock
 import pytest
 from git import Repo
 
-from esrally import exceptions
-from esrally.utils import git
+from dbrally import exceptions
+from dbrally.utils import git
 
 
 def commit(repo, *, date=None):

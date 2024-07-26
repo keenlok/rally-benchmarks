@@ -24,8 +24,8 @@ from unittest import mock
 
 import pytest
 
-from esrally import config, exceptions
-from esrally.mechanic import supplier, team
+from dbrally import config, exceptions
+from dbrally.mechanic import supplier, team
 
 
 class TestRevisionExtractor:

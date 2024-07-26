@@ -18,8 +18,8 @@
 import os
 
 import it
-from esrally import version
-from esrally.utils import process
+from dbrally import version
+from dbrally.utils import process
 
 
 def test_docker_geonames():

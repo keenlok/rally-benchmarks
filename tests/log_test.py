@@ -24,7 +24,7 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from esrally import log
+from dbrally import log
 
 
 class TestLog:

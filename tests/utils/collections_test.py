@@ -20,7 +20,7 @@ from typing import Any, Mapping
 
 import pytest
 
-from esrally.utils import collections
+from dbrally.utils import collections
 
 
 class TestMergeDicts:

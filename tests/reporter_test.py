@@ -18,9 +18,9 @@
 
 from unittest import mock
 
-from esrally import config, reporter
-from esrally.metrics import GlobalStats
-from esrally.utils import convert
+from dbrally import config, reporter
+from dbrally.metrics import GlobalStats
+from dbrally.utils import convert
 
 
 class TestFormatter:

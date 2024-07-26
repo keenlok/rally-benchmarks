@@ -19,9 +19,9 @@ import random
 
 import pytest
 
-from esrally import exceptions
-from esrally.driver import scheduler
-from esrally.track import track
+from dbrally import exceptions
+from dbrally.driver import scheduler
+from dbrally.track import track
 
 
 def assert_throughput(sched, expected_average_throughput, msg="", relative_delta=0.05):

@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from esrally.client import common
+from dbrally.client import common
 
 
 # pylint: disable=protected-access

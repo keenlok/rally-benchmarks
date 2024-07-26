@@ -17,7 +17,7 @@
 import json
 
 import it
-from esrally.utils import process
+from dbrally.utils import process
 
 
 @it.random_rally_config

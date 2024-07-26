@@ -17,7 +17,7 @@
 
 from unittest import mock
 
-from esrally.tracker.index import (
+from dbrally.tracker.index import (
     extract_index_mapping_and_settings,
     extract_indices_from_data_stream,
     filter_ephemeral_index_settings,

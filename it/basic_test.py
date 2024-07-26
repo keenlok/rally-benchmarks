@@ -18,7 +18,7 @@ import os
 import tempfile
 
 import it
-from esrally.utils import process
+from dbrally.utils import process
 
 
 @it.rally_in_mem

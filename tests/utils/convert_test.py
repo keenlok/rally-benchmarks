@@ -17,7 +17,7 @@
 
 import pytest
 
-from esrally.utils import convert
+from dbrally.utils import convert
 
 
 class TestToBool:

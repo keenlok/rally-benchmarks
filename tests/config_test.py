@@ -19,7 +19,7 @@ import configparser
 
 import pytest
 
-from esrally import config, exceptions
+from dbrally import config, exceptions
 
 
 class MockInput:

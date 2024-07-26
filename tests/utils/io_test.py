@@ -22,7 +22,7 @@ import subprocess
 import tempfile
 from unittest import mock
 
-from esrally.utils import io
+from dbrally.utils import io
 
 
 def mock_debian(args, fallback=None):

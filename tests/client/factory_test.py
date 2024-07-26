@@ -32,9 +32,9 @@ import urllib3.exceptions
 from elastic_transport import ApiResponseMeta, HttpHeaders, NodeConfig
 from pytest_httpserver import HTTPServer
 
-from esrally import client, doc_link, exceptions
-from esrally.client.asynchronous import RallyAsyncTransport
-from esrally.utils import console
+from dbrally import client, doc_link, exceptions
+from dbrally.client.asynchronous import RallyAsyncTransport
+from dbrally.utils import console
 
 
 def _api_error(status, message):

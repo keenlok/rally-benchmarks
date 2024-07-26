@@ -22,8 +22,8 @@ from unittest import mock
 
 import pytest
 
-from esrally import exceptions
-from esrally.mechanic import provisioner, team
+from dbrally import exceptions
+from dbrally.mechanic import provisioner, team
 
 HOME_DIR = os.path.expanduser("~")
 

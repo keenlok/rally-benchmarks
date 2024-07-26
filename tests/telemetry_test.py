@@ -28,10 +28,10 @@ import elastic_transport
 import elasticsearch
 import pytest
 
-from esrally import config, exceptions, metrics, telemetry
-from esrally.mechanic import cluster
-from esrally.metrics import MetaInfoScope
-from esrally.utils import console, serverless
+from dbrally import config, exceptions, metrics, telemetry
+from dbrally.mechanic import cluster
+from dbrally.metrics import MetaInfoScope
+from dbrally.utils import console, serverless
 
 
 class TestSamplerThread:

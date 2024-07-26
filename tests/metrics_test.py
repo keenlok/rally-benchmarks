@@ -31,10 +31,10 @@ import elasticsearch.exceptions
 import elasticsearch.helpers
 import pytest
 
-from esrally import config, exceptions, metrics, paths, track
-from esrally.metrics import GlobalStatsCalculator
-from esrally.track import Challenge, Operation, Task, Track
-from esrally.utils import opts
+from dbrally import config, exceptions, metrics, paths, track
+from dbrally.metrics import GlobalStatsCalculator
+from dbrally.track import Challenge, Operation, Task, Track
+from dbrally.utils import opts
 
 
 class MockClientFactory:

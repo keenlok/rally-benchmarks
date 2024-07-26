@@ -22,7 +22,7 @@ from unittest import mock
 
 import pytest
 
-from esrally.client.asynchronous import RallyTCPConnector, ResponseMatcher
+from dbrally.client.asynchronous import RallyTCPConnector, ResponseMatcher
 
 
 class TestResponseMatcher:

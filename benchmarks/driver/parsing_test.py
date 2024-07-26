@@ -22,7 +22,7 @@ import re
 import pytest
 import ujson
 
-from esrally.driver import es_runner
+from dbrally.driver import es_runner
 
 
 @pytest.mark.benchmark(

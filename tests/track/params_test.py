@@ -20,9 +20,9 @@ import random
 
 import pytest
 
-from esrally import exceptions
-from esrally.track import params, track
-from esrally.utils import io
+from dbrally import exceptions
+from dbrally.track import params, track
+from dbrally.utils import io
 
 
 class StaticBulkReader:

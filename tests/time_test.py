@@ -18,14 +18,14 @@
 import time
 from unittest import mock
 
-import esrally.time
+import dbrally.time
 
 
 class TestTime:
     def test_split_time_increases(self):
         wait_period_seconds = 0.05
 
-        stop_watch = esrally.time.Clock.stop_watch()
+        stop_watch = dbrally.time.Clock.stop_watch()
         stop_watch.start()
         prev_split_time = 0
         for _ in range(3):
@@ -39,7 +39,7 @@ class TestTime:
 
     @mock.patch("esrally.time.StopWatch._now", side_effect=[1, 2])
     def test_total_time_roughly_in_expected_range(self, mock_now):
-        stop_watch = esrally.time.Clock.stop_watch()
+        stop_watch = dbrally.time.Clock.stop_watch()
         stop_watch.start()
         stop_watch.stop()
 
@@ -49,8 +49,8 @@ class TestTime:
 
     @mock.patch("esrally.time.Clock.now", side_effect=[1, 2])
     def test_millis_conversion_roughly_in_expected_range(self, mock_now):
-        start = esrally.time.to_epoch_millis(esrally.time.Clock.now())
-        end = esrally.time.to_epoch_millis(esrally.time.Clock.now())
+        start = dbrally.time.to_epoch_millis(dbrally.time.Clock.now())
+        end = dbrally.time.to_epoch_millis(dbrally.time.Clock.now())
 
         assert end - start == 2000 - 1000
         assert mock_now.call_count == 2

@@ -21,7 +21,7 @@ from unittest import mock
 
 import pytest
 
-from esrally import config, exceptions, racecontrol
+from dbrally import config, exceptions, racecontrol
 
 
 @pytest.fixture

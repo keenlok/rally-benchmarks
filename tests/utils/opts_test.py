@@ -20,7 +20,7 @@ from unittest import mock
 
 import pytest
 
-from esrally.utils import opts
+from dbrally.utils import opts
 
 
 class TestConfigHelperFunction:
