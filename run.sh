@@ -28,7 +28,7 @@
 readonly BINARY_NAME="${__RALLY_INTERNAL_BINARY_NAME}"
 readonly HUMAN_NAME="${__RALLY_INTERNAL_HUMAN_NAME}"
 
-install_esrally() {
+install_dbrally() {
     # Check if optional parameter with Rally binary path, points to an existing executable file.
     if [[ $# -ge 1 && -n $1 ]]; then
         if [[ -f $1 && -x $1 ]]; then return; fi
@@ -98,7 +98,7 @@ then
       then
         echo "Auto-updating Rally from ${REMOTE}"
         git rebase ${REMOTE}/master --quiet
-        install_esrally
+        install_dbrally
       #else
       # offline - skipping update
       fi
@@ -124,14 +124,16 @@ if [[ $IN_VIRTUALENV == 0 ]]
 then
     RALLY_ROOT=$(python3 -c "import site; print(site.USER_BASE)")
     RALLY_BIN=${RALLY_ROOT}/bin/${BINARY_NAME}
-    install_esrally "${RALLY_BIN}"
+    echo "BIN: $RALLY_BIN"
+    echo "ROOT: $RALLY_ROOT"
+    install_dbrally "${RALLY_BIN}"
     if [[ -x $RALLY_BIN ]]; then
         ${RALLY_BIN} "$@"
     else
         echo "Cannot execute ${HUMAN_NAME} in ${RALLY_BIN}."
     fi
 else
-    install_esrally "${BINARY_NAME}"
+    install_dbrally "${BINARY_NAME}"
 
     ${BINARY_NAME} "$@"
 fi

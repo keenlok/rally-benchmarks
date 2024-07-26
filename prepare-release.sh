@@ -46,7 +46,7 @@ CHANGELOG="$(python3 changelog.py ${RELEASE_VERSION})"
 printf "$CHANGELOG\n\n$(cat CHANGELOG.md)" > CHANGELOG.md
 
 echo "Updating release version number"
-printf '__version__ = "%s"\n' $RELEASE_VERSION > esrally/_version.py
+printf '__version__ = "%s"\n' $RELEASE_VERSION > dbrally/_version.py
 git commit -a -m "Bump version to $RELEASE_VERSION"
 
 pip install --editable .
