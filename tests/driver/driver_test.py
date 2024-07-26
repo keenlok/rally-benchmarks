@@ -26,10 +26,10 @@ import elastic_transport
 import elasticsearch
 import pytest
 
-from esrally import config, exceptions, metrics, track
-from esrally.driver import driver, es_runner, scheduler
-from esrally.driver.driver import ApiKey, ClientContext
-from esrally.track import params
+from dbrally import config, exceptions, metrics, track
+from dbrally.driver import driver, es_runner, scheduler
+from dbrally.driver.driver import ApiKey, ClientContext
+from dbrally.track import params
 
 
 class DriverTestParamSource:

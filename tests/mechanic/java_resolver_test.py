@@ -19,8 +19,8 @@ from unittest import mock
 
 import pytest
 
-from esrally import exceptions
-from esrally.mechanic import java_resolver
+from dbrally import exceptions
+from dbrally.mechanic import java_resolver
 
 
 class TestJavaResolver:

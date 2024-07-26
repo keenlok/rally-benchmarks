@@ -24,7 +24,7 @@ from pathlib import Path as _Path
 from types import FunctionType
 from typing import Optional, get_args
 
-from esrally import types
+from dbrally import types
 
 
 class Path(_Path):

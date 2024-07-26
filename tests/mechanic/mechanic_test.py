@@ -19,8 +19,8 @@ from unittest import mock
 
 import pytest
 
-from esrally import config, exceptions
-from esrally.mechanic import mechanic
+from dbrally import config, exceptions
+from dbrally.mechanic import mechanic
 
 
 class TestHostHandling:

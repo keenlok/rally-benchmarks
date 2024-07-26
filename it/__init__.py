@@ -29,8 +29,8 @@ import time
 
 import pytest
 
-from esrally import client, config, version
-from esrally.utils import process
+from dbrally import client, config, version
+from dbrally.utils import process
 
 CONFIG_NAMES = ["in-memory-it", "es-it"]
 DISTRIBUTIONS = ["8.4.0"]

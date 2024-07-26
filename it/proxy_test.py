@@ -21,7 +21,7 @@ import os
 import pytest
 
 import it
-from esrally.utils import process
+from dbrally.utils import process
 
 # pylint: disable=unused-import
 from it import fresh_log_file

@@ -28,9 +28,9 @@ import elastic_transport
 import elasticsearch
 import pytest
 
-from esrally import client, config, exceptions
-from esrally.client.asynchronous import RallyAsyncElasticsearch
-from esrally.driver import es_runner
+from dbrally import client, config, exceptions
+from dbrally.client.asynchronous import RallyAsyncElasticsearch
+from dbrally.driver import es_runner
 
 
 class BaseUnitTestContextManagerRunner:

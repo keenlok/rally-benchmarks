@@ -20,7 +20,7 @@ from unittest import mock
 
 import psutil
 
-from esrally.utils import process
+from dbrally.utils import process
 
 
 class Process:

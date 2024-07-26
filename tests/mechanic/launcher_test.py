@@ -28,10 +28,10 @@ import elasticsearch
 import psutil
 import pytest
 
-from esrally import config, exceptions, telemetry
-from esrally.mechanic import cluster, launcher
-from esrally.mechanic.provisioner import NodeConfiguration
-from esrally.metrics import InMemoryMetricsStore
+from dbrally import config, exceptions, telemetry
+from dbrally.mechanic import cluster, launcher
+from dbrally.mechanic.provisioner import NodeConfiguration
+from dbrally.metrics import InMemoryMetricsStore
 
 
 class MockClientFactory:

@@ -21,7 +21,7 @@ from unittest import mock
 
 import pytest
 
-from esrally.utils import console
+from dbrally.utils import console
 
 
 class TestConsoleFunction:

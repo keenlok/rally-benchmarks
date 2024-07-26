@@ -25,7 +25,7 @@ except ImportError:
     print("Please install matplotlib")
     exit(1)
 
-from esrally.driver import scheduler
+from dbrally.driver import scheduler
 
 
 def main():

@@ -96,14 +96,14 @@ project = "Rally"
 copyright = "%i, Elasticsearch B.V." % year
 author = "Daniel Mitterdorfer"
 
-import esrally
+import dbrally
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
 # built documents.
 #
 # Technically the short X.Y version, but let's use the full version, including .dev0
-version = esrally.__version__
+version = dbrally.__version__
 # The full version, including alpha/beta/rc tags.
 release = version
 

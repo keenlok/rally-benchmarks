@@ -17,9 +17,9 @@
 
 import pytest
 
-from esrally import exceptions
-from esrally.track import track
-from esrally.utils import serverless
+from dbrally import exceptions
+from dbrally.track import track
+from dbrally.utils import serverless
 
 
 class TestTrack:

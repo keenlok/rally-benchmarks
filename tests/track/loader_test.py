@@ -25,9 +25,9 @@ from unittest import mock
 
 import pytest
 
-from esrally import config, exceptions
-from esrally.track import loader, track
-from esrally.utils import io
+from dbrally import config, exceptions
+from dbrally.track import loader, track
+from dbrally.utils import io
 
 
 def strip_ws(s):

@@ -20,8 +20,8 @@ import re
 
 import pytest
 
-from esrally import exceptions
-from esrally.utils import versions
+from dbrally import exceptions
+from dbrally.utils import versions
 
 
 class TestsVersions:

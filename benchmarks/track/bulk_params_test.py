@@ -19,7 +19,7 @@ import sys
 
 import pytest
 
-from esrally.track import params
+from dbrally.track import params
 
 
 class StaticSource:

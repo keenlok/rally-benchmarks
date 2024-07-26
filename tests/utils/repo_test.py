@@ -20,8 +20,8 @@ from unittest import mock
 
 import pytest
 
-from esrally import exceptions
-from esrally.utils import repo
+from dbrally import exceptions
+from dbrally.utils import repo
 
 
 class TestRallyRepository:

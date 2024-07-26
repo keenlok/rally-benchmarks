@@ -19,8 +19,8 @@ from unittest import mock
 
 import pytest
 
-from esrally import exceptions
-from esrally.utils import jvm
+from dbrally import exceptions
+from dbrally.utils import jvm
 
 
 class TestJvm:

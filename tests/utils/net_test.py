@@ -22,7 +22,7 @@ import pytest
 import urllib3.exceptions
 from werkzeug.wrappers import Response
 
-from esrally.utils import net
+from dbrally.utils import net
 
 
 class TestNetUtils:

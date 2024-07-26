@@ -20,8 +20,8 @@ import re
 
 import pytest
 
-from esrally import exceptions
-from esrally.mechanic import team
+from dbrally import exceptions
+from dbrally.mechanic import team
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
