@@ -3,16 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "esrally/_version.py"
+path = "dbrally/_version.py"
 
 
 [project]
-name = "esrally"
+name = "dbrally"
 dynamic = ["version"]
 authors = [
     { name = "Daniel Mitterdorfer", email = "daniel.mitterdorfer@gmail.com" },
 ]
-description = "Macrobenchmarking framework for Elasticsearch"
+description = "Macrobenchmarking framework for Elastic/Opensearch"
 readme = "README.md"
 license = { text = "Apache License 2.0" }
 requires-python = ">=3.8"
@@ -84,6 +84,8 @@ dependencies = [
     "zstandard==0.21.0",
     # License: Python Software Foundation License
     "typing-extensions==4.12.2",
+    "opensearch-py[async]==2.6.0",
+    "psycopg[binary]==3.2.1"
 ]
 
 [project.optional-dependencies]
@@ -125,8 +127,8 @@ develop = [
 ]
 
 [project.scripts]
-esrally = "esrally.rally:main"
-esrallyd = "esrally.rallyd:main"
+dbrally = "dbrally.rally:main"
+dbrallyd = "dbrally.rallyd:main"
 
 [project.urls]
 "Changelog" = "https://github.com/elastic/rally/blob/master/CHANGELOG.md"
@@ -191,14 +193,14 @@ disable_error_code = [
     "union-attr",
     "var-annotated",
 ]
-files = ["esrally/", "it/", "tests/"]
+files = ["dbrally/", "it/", "tests/"]
 
 [[tool.mypy.overrides]]
 module = [
-    "esrally.mechanic.team",
-    "esrally.utils.modules",
-    "esrally.utils.io",
-    "esrally.utils.process",
+    "dbrally.mechanic.team",
+    "dbrally.utils.modules",
+    "dbrally.utils.io",
+    "dbrally.utils.process",
 ]
 disallow_incomplete_defs = true
 # this should be a copy of disabled_error_code from above

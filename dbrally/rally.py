@@ -131,7 +131,7 @@ def create_arg_parser():
 
     parser = argparse.ArgumentParser(
         prog=PROGRAM_NAME,
-        description=BANNER + "\n\n You Know, for Benchmarking Elasticsearch.",
+        description=BANNER + "\n\n You Know, for Benchmarking Elastic/Opensearch, Postgres, Mongo and hopefully more.",
         epilog=f"Find out more about Rally at {console.format.link(doc_link())}",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

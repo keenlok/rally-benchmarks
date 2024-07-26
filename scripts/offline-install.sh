@@ -97,7 +97,7 @@ echo "Installing Rally ${RALLY_VERSION}..."
 command -v python3 >/dev/null 2>&1 || { echo >&2 "Python3 ${PYTHON_ERROR_MSG}"; exit 1; }
 command -v pip3 >/dev/null 2>&1 || { echo >&2 "pip3 ${PYTHON_ERROR_MSG}"; exit 1; }
 
-pip3 install esrally==${RALLY_VERSION} --no-index --find-links file://\${SRC_HOME}/bin
+pip3 install dbrally==${RALLY_VERSION} --no-index --find-links file://\${SRC_HOME}/bin
 EOL
     chmod u+x ${install_script}
 
