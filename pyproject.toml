@@ -85,7 +85,9 @@ dependencies = [
     # License: Python Software Foundation License
     "typing-extensions==4.12.2",
     "opensearch-py[async]==2.6.0",
-    "psycopg[binary]==3.2.1"
+    "psycopg[binary]==3.2.1",
+    "pgvector==0.3.0",
+    "pymongo==4.8.0"
 ]
 
 [project.optional-dependencies]
