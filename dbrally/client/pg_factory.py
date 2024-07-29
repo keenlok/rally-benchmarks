@@ -1,6 +1,6 @@
 import logging
 
-from dbrally.client.pg_client import RallyAsyncPostgres
+from dbrally.client.pg_client import RallyAsyncPostgres, RallySyncPostgres
 
 
 class PgClientFactory:
@@ -50,11 +50,13 @@ class PgClientFactory:
     def create(self):
         """
         Simplify how Client creation is handled so that it is consistent with ES
+        Creates a synchronous client.
         """
         # pylint: disable=import-outside-toplevel
         import psycopg
 
-        return psycopg.connect(host=self.hosts, **self.client_options)
+        return RallySyncPostgres(host=self.hosts,
+                                 **self.client_options)
 
     def create_async(self):
         """
