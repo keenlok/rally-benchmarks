@@ -12,14 +12,14 @@ def get_conninfo(hosts, kwargs):
     if hosts is None:
         hosts = [{"host": "localhost"}]
 
-    print(hosts, kwargs)
+    # print(hosts, kwargs)
     scheme = kwargs.get('scheme', 'mongodb+srv')
     host_str = ",".join([host.get('host') for host in hosts])
     user_spec = kwargs.get('userspec', '')
     url_prefix = hosts[0].get('url_prefix', '/')
     url_query = kwargs.get('url_query')
     conninfo = f"{scheme}://{user_spec}@{host_str}{url_prefix}{url_query}"
-    print(conninfo)
+    # print(conninfo)
     return conninfo
 
 
