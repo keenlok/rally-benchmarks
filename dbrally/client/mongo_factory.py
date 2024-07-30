@@ -38,7 +38,7 @@ class MongoClientFactory:
         self.logger.info("Creating Mongo client connected to %s with options [%s]", hosts, masked_client_options)
 
         # we're using an SSL context now and it is not allowed to have use_ssl present in client options anymore
-        scheme = client_options.get("scheme", "mongo")
+        scheme = client_options.get("scheme", "mongodb+srv")
         self.client_options["scheme"] = scheme
 
         if self._is_set(self.client_options, "basic_auth_user") and self._is_set(self.client_options,
