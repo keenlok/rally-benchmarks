@@ -18,7 +18,7 @@ def get_conninfo(hosts, kwargs):
     user_spec = kwargs.get('userspec', '')
     url_prefix = hosts[0].get('url_prefix', '/')
     url_query = hosts[0].get('url_query')
-    conninfo = f"{scheme}://{user_spec}@{host_str}{url_prefix}?{url_query}"
+    conninfo = f"{scheme}://{user_spec}@{host_str}{url_prefix}{url_query}"
     print(conninfo)
     return conninfo
 
