@@ -12,7 +12,7 @@ def get_conninfo(hosts, kwargs):
     if hosts is None:
         hosts = [{"host": "localhost"}]
 
-    print(hosts)
+    print(hosts, kwargs)
     scheme = kwargs.get('scheme', 'mongo')
     host_str = ",".join([host.get('host') for host in hosts])
     user_spec = kwargs.get('userspec', '')
