@@ -13,7 +13,7 @@ def get_conninfo(hosts, kwargs):
         hosts = [{"host": "localhost"}]
 
     print(hosts, kwargs)
-    scheme = kwargs.get('scheme', 'mongo')
+    scheme = kwargs.get('scheme', 'mongo+srv')
     host_str = ",".join([host.get('host') for host in hosts])
     user_spec = kwargs.get('userspec', '')
     url_prefix = hosts[0].get('url_prefix', '/')
