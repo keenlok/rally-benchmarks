@@ -2,7 +2,7 @@ from dbrally.client.context import RequestContextHolder
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
-from motor import MotorClient
+from motor.motor_asyncio import AsyncIOMotorClient as MotorClient
 from dbrally.exceptions import ConfigError
 
 
