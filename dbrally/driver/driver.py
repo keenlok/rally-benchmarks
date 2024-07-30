@@ -846,6 +846,8 @@ class Driver:
             )
         elif database_type == "postgres":
             self.prepare_telemetry()
+        elif database_type == "mongo":
+            self.prepare_telemetry()
         elif database_type == "opensearch":
             os_clients = self.create_os_clients()
 
@@ -862,9 +864,6 @@ class Driver:
             # Avoid issuing any requests to the target cluster when static responses are enabled. The results
             # are not useful and attempts to connect to a non-existing cluster just lead to exception traces in logs.
             self._prepare_telemetry_os(os_clients, enable=not uses_static_responses)
-
-        elif database_type == "mongo":
-            pass
         else:
             self.logger.error(f"Database driver for {database_type} not implemented yet")
             exit(1)
@@ -1957,6 +1956,15 @@ class AsyncIoAdapter:
                 ).create_async()
             return pg
 
+        def mongo_clients(client_id, all_hosts, all_client_options):
+            mongo = {}
+            for cluster_name, cluster_hosts in all_hosts.items():
+                mongo[cluster_name] = client.MongoClientFactory(
+                    cluster_hosts,
+                    all_client_options[cluster_name]
+                ).create_async()
+            return mongo
+
         if self.assertions_enabled:
             self.logger.info("Task assertions enabled")
         if self.database_type == "elasticsearch":
@@ -2010,6 +2018,17 @@ class AsyncIoAdapter:
                     self.cfg.opts("client", "options").with_max_connections(client_count))
                 async_executor = AsyncExecutor(
                     client_id, task, schedule, pg, self.sampler, self.cancel, self.complete,
+                    task.error_behavior(self.abort_on_error))
+            elif self.database_type == "mongo":
+                self.logger.info("Initialising mongo Clients for Async tasks")
+
+                client_count = len(self.task_allocations)
+                mongo = mongo_clients(
+                    client_id,
+                    self.cfg.opts("client", "hosts").all_hosts,
+                    self.cfg.opts("client", "options").with_max_connections(client_count))
+                async_executor = AsyncExecutor(
+                    client_id, task, schedule, mongo, self.sampler, self.cancel, self.complete,
                     task.error_behavior(self.abort_on_error))
             else:
                 self.logger.info("Unimplemented Async Client")

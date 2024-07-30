@@ -29,3 +29,7 @@ from .os_factory import (
 from .pg_factory import (
     PgClientFactory
 )
+
+from .mongo_factory import (
+    MongoClientFactory
+)

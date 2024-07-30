@@ -87,7 +87,8 @@ dependencies = [
     "opensearch-py[async]==2.6.0",
     "psycopg[binary]==3.2.1",
     "pgvector==0.3.0",
-    "pymongo==4.8.0"
+    "pymongo[srv]==4.8.0",
+    "motor==3.5.1"
 ]
 
 [project.optional-dependencies]
