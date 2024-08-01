@@ -188,7 +188,7 @@ class EsClientFactory:
 
     def create(self):
         # pylint: disable=import-outside-toplevel
-        from dbrally.client.synchronous import RallySyncElasticsearch
+        from dbrally.client.es_client import RallySyncElasticsearch
 
         return RallySyncElasticsearch(
             distribution_version=self.distribution_version,
