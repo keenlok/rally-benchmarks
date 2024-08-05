@@ -1393,7 +1393,7 @@ class Worker(actor.RallyActor):
         if database_type == "opensearch":
             os_runner.register_default_runners()
             if self.track.has_plugins:
-                track.load_track_plugins(self.config, self.track.name, es_runner.register_runner, scheduler.register_scheduler)
+                track.load_track_plugins(self.config, self.track.name, os_runner.register_runner, scheduler.register_scheduler)
         else:
             es_runner.register_default_runners()
             if self.track.has_plugins:
