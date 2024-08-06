@@ -157,6 +157,7 @@ class SummaryReporter:
             if self.show_processing_time:
                 metrics_table.extend(self._report_processing_time(record, task))
             metrics_table.extend(self._report_error_rate(record, task))
+            metrics_table.extend(self._report_precision(record, task))
             self.add_warnings(warnings, record, task)
 
         self.write_report(metrics_table)
@@ -208,6 +209,9 @@ class SummaryReporter:
 
     def _report_processing_time(self, values, task):
         return self._report_percentiles("processing time", task, values["processing_time"])
+
+    def _report_precision(self, values, task):
+        return self._report_percentiles("precision", task, values["precision"])
 
     def _report_percentiles(self, name, task, value):
         lines = []
