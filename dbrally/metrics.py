@@ -2317,6 +2317,10 @@ class GlobalStats:
                         all_results.append(op_metrics(item, "error_rate", single_value=True))
                     if "duration" in item:
                         all_results.append(op_metrics(item, "duration", single_value=True))
+                    if "precision" in item:
+                        all_results.append(op_metrics(item, "precision"))
+                    if "num_of_relevant_results" in item:
+                        all_results.append(op_metrics(item, "num_of_relevant_results"))
             elif metric == "ml_processing_time":
                 for item in value:
                     all_results.append(
@@ -2357,6 +2361,10 @@ class GlobalStats:
         }
         if meta:
             doc["meta"] = meta
+            if "precision" in meta:
+                doc["precision"] = meta["precision"]
+            if "num_of_relevant_results" in meta:
+                doc["num_of_relevant_results"] = meta["num_of_relevant_results"]
         self.op_metrics.append(doc)
 
     def tasks(self):
